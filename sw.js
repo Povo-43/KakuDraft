@@ -1,5 +1,4 @@
-'./icon.png',
-  'https://fonts.googleapis.com/icon?family=Material+Iconsconst CACHE_NAME = 'kaku-draft-v2'; // 更新時はここを v3, v4 と上げる
+const CACHE_NAME = 'kaku-draft-v3'; // 更新時はここを v3, v4 と上げる
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

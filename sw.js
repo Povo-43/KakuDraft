@@ -1,9 +1,9 @@
-const CACHE_NAME = 'kaku-draft-v1';
+const CACHE_NAME = 'kaku-draft-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg', // SVGにした場合はここを修正
+  './icon.png',
   'https://fonts.googleapis.com/icon?family=Material+Icons'
 ];
 

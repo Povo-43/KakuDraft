@@ -94,8 +94,8 @@
     
     <div id="memo-panel" class="side-panel">
         <div style="font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px;">
-            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● LOCAL</span>
-            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● GLOBAL</span>
+            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話メモ</span>
+            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体メモ</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div style="display: flex; border-bottom: 1px solid var(--border);">
@@ -317,4 +317,9 @@
     function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }
     function exportFullData() { save(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], {type: 'application/json'})); a.download = `kaku_draft.json`; a.click(); }
     function showPreview() { document.getElementById('preview-overlay').innerHTML = editor.value.replace(/\n/g, '<br>'); document.getElementById('preview-overlay').style.display = 'block'; }
-    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:
+    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:""}], currentMemoIdx: 0}); state.currentIdx = state.chapters.length - 1; refreshUI(); loadChapter(state.currentIdx); }
+    function deleteChapter(i) { if(state.chapters.length <= 1 || !confirm("削除しますか？")) return; state.chapters.splice(i, 1); state.currentIdx = 0; refreshUI(); loadChapter(0); }
+    memoArea.oninput = save;
+</script>
+</body>
+</html>

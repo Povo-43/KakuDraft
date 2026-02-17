@@ -107,6 +107,7 @@
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
     const enc = (s) => btoa(unescape(encodeURIComponent(s)));
     const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
+    let syncTimer;    
 
     window.onload = () => {
         const saved = localStorage.getItem('kaku_v_pro_sync');
@@ -483,8 +484,11 @@ async function githubSync(mode) {
         
             // GitHubバックアップ（設定があれば）
             if (state.ghToken && state.ghRepo) {
-                try {
-                    await githubSync("up");
+                try 
+                    clearTimeout(syncTimer);
+                    syncTimer = setTimeout(() => {
+                        await githubSync("up");
+                    }, 2000);
                     console.log("Saved + GitHub backup complete");
                 } catch (err) {
                     console.error("GitHub backup failed:", err);
@@ -493,7 +497,6 @@ async function githubSync(mode) {
                 console.log("Saved (local only)");
             }
             break;
-
 
         // ======================
         // メモ開閉（Ctrl+M）

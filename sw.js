@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kaku-draft-v3'; // 更新時はここを v3, v4 と上げる
+const CACHE_NAME = 'kakudraft-v3'; // 更新時はここを v3, v4 と上げる
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

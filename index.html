@@ -64,7 +64,7 @@
             
             <h4>GitHub 同期</h4>
             <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
-            <div class="config-input-group"><input type="text" id="gh-repo" placeholder="ユーザー名/リポジトリ名"></div>
+            <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名"></div>
             <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
             <div style="display:flex; gap:5px; margin-bottom:10px;">
                 <button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button>
@@ -107,6 +107,7 @@
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
     const enc = (s) => btoa(unescape(encodeURIComponent(s)));
     const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
+    let syncTimer;    
 
     window.onload = () => {
         const saved = localStorage.getItem('kaku_v_pro_sync');
@@ -134,47 +135,64 @@
         updateStats();
     }
 
-    async function githubSync(mode) {
-        save();
+async function githubSync(mode) {
+    save();
 
-        const token = dec(state.ghToken);
-        const repo = state.ghRepo?.trim();
-        const path = "kakudraft_data.json";
+    const token = dec(state.ghToken);
+    const repoName = state.ghRepo?.trim();
+    const path = "kakudraft_data.json";
 
-        if (!token || !repo || !repo.includes("/")) {
-            alert("GitHub設定を正しく入力してください（user/repo 形式）");
-            return;
+    if (!token || !repoName) {
+        alert("GitHub設定を正しく入力してください");
+        return;
+    }
+
+    const headers = {
+        "Authorization": `Bearer ${token}`,
+        "Accept": "application/vnd.github+json"
+    };
+
+    try {
+        // ==========================
+        // 1. login取得
+        // ==========================
+        const userRes = await fetch("https://api.github.com/user", { headers });
+
+        if (!userRes.ok) {
+            throw new Error("トークンが無効です");
         }
 
+        const { login } = await userRes.json();
+        const repo = `${login}/${repoName}`;
         const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
 
-        const headers = {
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/vnd.github+json"
-        };
+        let sha = null;
+        let remoteData = null;
 
-        try {
-            let sha = null;
-            let remoteData = null;
+        // ==========================
+        // 2. 既存ファイル確認
+        // ==========================
+        const getRes = await fetch(apiUrl, { headers });
 
-            // 既存ファイル確認
-            const getRes = await fetch(apiUrl, { headers });
+        if (getRes.status === 200) {
+            const json = await getRes.json();
+            sha = json.sha;
 
-            if (getRes.status === 200) {
-                const json = await getRes.json();
-                sha = json.sha;
-                const cleaned = json.content.replace(/\n/g, "");
-                const binary = atob(cleaned);
-                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-                const decoded = new TextDecoder().decode(bytes);
-                remoteData = JSON.parse(decoded);
+            const cleaned = json.content.replace(/\n/g, "");
+            const binary = atob(cleaned);
+            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+            const decoded = new TextDecoder().decode(bytes);
+            remoteData = JSON.parse(decoded);
 
-            } else if (getRes.status !== 404) {
-                const err = await getRes.text();
-                throw new Error(`取得失敗: ${getRes.status} ${err}`);
-            }
+        } else if (getRes.status !== 404) {
+            const err = await getRes.text();
+            throw new Error(`取得失敗: ${getRes.status} ${err}`);
+        }
 
-            if (mode === "up") {
+        // ==========================
+        // 3. アップロード
+        // ==========================
+        if (mode === "up") {
 
                 const jsonStr = JSON.stringify(state);
                 const bytes = new TextEncoder().encode(jsonStr);
@@ -191,51 +209,54 @@
                     content
                 };
 
-                if (sha) body.sha = sha;
+            if (sha) body.sha = sha;
 
-                const putRes = await fetch(apiUrl, {
-                    method: "PUT",
-                    headers,
-                    body: JSON.stringify(body)
-                });
+            const putRes = await fetch(apiUrl, {
+                method: "PUT",
+                headers,
+                body: JSON.stringify(body)
+            });
 
-                const result = await putRes.json();
+            const result = await putRes.json();
 
-                if (!putRes.ok) {
-                    throw new Error(result.message || "アップロード失敗");
-                }
-
-                alert("アップロード成功");
-
-            } else {
-
-                if (!remoteData) {
-                    alert("リモートにデータがありません。先にUPしてください。");
-                    return;
-                }
-
-                if (!confirm("リモートデータで復元しますか？")) return;
-
-                const oldToken = state.ghToken;
-                const oldRepo = state.ghRepo;
-                const oldDevice = state.deviceName;
-
-                state = remoteData;
-
-                state.ghToken = oldToken;
-                state.ghRepo = oldRepo;
-                state.deviceName = oldDevice;
-
-                localStorage.setItem("kaku_v_pro_sync", JSON.stringify(state));
-                alert("復元完了");
-                location.reload();
+            if (!putRes.ok) {
+                throw new Error(result.message || "アップロード失敗");
             }
 
-        } catch (err) {
-            console.error(err);
-            alert("GitHub同期エラー:\n" + err.message);
+            alert("アップロード成功");
+
+        // ==========================
+        // 4. ダウンロード
+        // ==========================
+        } else {
+
+            if (!remoteData) {
+                alert("リモートにデータがありません。先にUPしてください。");
+                return;
+            }
+
+            if (!confirm("リモートデータで復元しますか？")) return;
+
+            const oldToken = state.ghToken;
+            const oldRepo = state.ghRepo;
+            const oldDevice = state.deviceName;
+
+            state = remoteData;
+
+            state.ghToken = oldToken;
+            state.ghRepo = oldRepo;
+            state.deviceName = oldDevice;
+
+            localStorage.setItem("kaku_v_pro_sync", JSON.stringify(state));
+            alert("復元完了");
+            location.reload();
         }
+
+    } catch (err) {
+        console.error(err);
+        alert("GitHub同期エラー:\n" + err.message);
     }
+}
 
     function execReplace() {
         const val = editor.value; const cursor = editor.selectionStart;
@@ -460,14 +481,17 @@
         // ======================
         case "s":
             e.preventDefault();
-
+        
             // ローカル保存
             save();
-
+        
             // GitHubバックアップ（設定があれば）
-            if (state.github && state.github.token && state.github.repo) {
-                try {
-                    await githubSync("up");
+            if (state.ghToken && state.ghRepo) {
+                try 
+                    clearTimeout(syncTimer);
+                    syncTimer = setTimeout(() => {
+                        await githubSync("up");
+                    }, 2000);
                     console.log("Saved + GitHub backup complete");
                 } catch (err) {
                     console.error("GitHub backup failed:", err);
@@ -476,7 +500,6 @@
                 console.log("Saved (local only)");
             }
             break;
-
 
         // ======================
         // メモ開閉（Ctrl+M）

@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>KakuDraft</title>
+    <link rel="icon" type="image/png" href="./icon.png">
+    <link rel="apple-touch-icon" href="./icon.png">
     <link rel="manifest" href="manifest.json">
     <script>
         if ('serviceWorker' in navigator) {
@@ -269,8 +271,36 @@
     function renderMemos() {
         const m = state.memoScope === 'local' ? (state.chapters[state.currentIdx].memos || []) : (state.globalMemos || []);
         const a = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
-        document.getElementById('memo-tabs').innerHTML = m.map((x, i) => `<div class="tab ${i === a ? 'active' : ''}" onclick="switchMemo(${i})">${x.name}</div>`).join('');
+        document.getElementById('memo-tabs').innerHTML = m.map((x, i) => `
+            <div class="tab ${i === a ? 'active' : ''}" style="display:flex; align-items:center; gap:5px;">
+                <span style="flex:1; cursor:pointer;" onclick="switchMemo(${i})">${x.name}</span>
+                <span style="font-size:12px; cursor:pointer;" onclick="deleteMemo(${i})">×</span>
+            </div>
+        `).join('');
+
         memoArea.value = m[a] ? m[a].content : "";
+    }
+    function deleteMemo(i) {
+        const target = state.memoScope === 'local'
+            ? state.chapters[state.currentIdx].memos
+            : state.globalMemos;
+        if (target.length <= 1) {
+            alert("最低1つは必要です。");
+            return;
+        }
+        if (!confirm("このメモを削除しますか？")) return;
+        target.splice(i, 1);
+        if (state.memoScope === 'local') {
+            if (state.chapters[state.currentIdx].currentMemoIdx >= target.length) {
+                state.chapters[state.currentIdx].currentMemoIdx = target.length - 1;
+            }
+        } else {
+            if (state.currentGlobalMemoIdx >= target.length) {
+                state.currentGlobalMemoIdx = target.length - 1;
+            }
+        }
+        renderMemos();
+        save();
     }
     function switchMemo(i) { save(); if(state.memoScope === 'local') state.chapters[state.currentIdx].currentMemoIdx = i; else state.currentGlobalMemoIdx = i; renderMemos(); }
     function addMemoTab() {

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>KakuDraft</title>
+    <link rel="manifest" href="manifest.json">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js', { scope: './' });
+            });
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --bg: #fcfaf2; --text: #333; --border: #000; --panel: #fff; --input-bg: #fff; --hl: rgba(0,0,0,0.05); --editor-size: 18px; }
+        [data-theme="dark"] { --bg: #121212; --text: #e0e0e0; --border: #444; --panel: #1e1e1e; --input-bg: #2a2a2a; --hl: rgba(255,255,255,0.08); }
+        body { margin: 0; font-family: "Sawarabi Mincho", serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+        main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; }
+        #editor-container { flex: 1; display: flex; flex-direction: column; position: relative; width: 100%; }
+        #editor { flex: 1; padding: 40px 10%; font-size: var(--editor-size); line-height: 1.7; border: none; outline: none; background: transparent; color: var(--text); resize: none; overflow-y: auto; width: 100%; box-sizing: border-box; z-index: 2; }
+        #line-highlight { position: absolute; left: 0; width: 100%; height: 1.7em; background: var(--hl); pointer-events: none; z-index: 1; transition: top 0.1s; display: none; }
+        .side-panel { width: 0; background: var(--panel); border-left: 1px solid var(--border); transition: 0.2s; display: flex; flex-direction: column; overflow: hidden; z-index: 50; }
+        .side-panel.open { width: 350px; }
+        .panel-content { padding: 20px; flex: 1; overflow-y: auto; box-sizing: border-box; }
+        .config-list { border: 1px solid var(--border); margin-bottom: 10px; font-size: 12px; background: var(--input-bg); min-height: 40px; }
+        .config-item { display: flex; border-bottom: 1px solid var(--border); align-items: center; padding: 8px 10px; gap: 8px; color: var(--text); }
+        .config-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        .config-input-group input { flex: 1; min-width: 0; padding: 6px; border: 1px solid var(--border); font-size: 11px; background: var(--input-bg); color: var(--text); }
+        .tab-bar { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
+        .tab { padding: 10px 15px; font-size: 11px; cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; }
+        .tab.active { background: var(--panel); font-weight: bold; border-bottom: 2px solid var(--text); }
+        .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
+        .chapter-item { padding: 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+        .chapter-item.active { background: var(--bg); font-weight: bold; }
+        footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+        .btn-group { display: flex; overflow-x: auto; }
+        footer button { height: 45px; min-width: 45px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .sys-btn { width: 100%; border: 1px solid var(--border); height: 35px; margin-bottom: 5px; font-size: 11px; background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; }
+        #preview-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); display: none; overflow-y: auto; padding: 60px 20%; z-index: 200; box-sizing: border-box; line-height: 1.7; }
+    </style>
+</head>
+<body data-theme="light">
+<main>
+    <div id="editor-container"><div id="line-highlight"></div><textarea id="editor" placeholder="執筆を開始..."></textarea></div>
+    
+    <div id="memo-panel" class="side-panel">
+        <div style="font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px;">
+            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● LOCAL</span>
+            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● GLOBAL</span>
+        </div>
+        <div id="memo-tabs" class="tab-bar"></div>
+        <div style="display: flex; border-bottom: 1px solid var(--border);"><input type="text" id="new-memo-name" placeholder="＋メモ名" style="flex:1; border:none; padding:10px; font-size:11px; background:var(--input-bg); color:var(--text);"><button onclick="addMemoTab()" style="border:none; background:var(--panel); border-left:1px solid var(--border); width:50px; cursor:pointer; color:var(--text);"><span class="material-icons">add</span></button></div>
+        <textarea id="memo-area" style="flex:1; width:100%; border:none; outline:none; padding:15px; background:transparent; color:var(--text); resize:none; font-size:13px; line-height:1.7;"></textarea>
+    </div>
+
+    <div id="menu-panel" class="side-panel">
+        <div class="panel-content">
+            <div id="stats-display" style="font-size: 13px; padding: 10px; border: 1px solid var(--border); margin-bottom: 20px; background: var(--input-bg); text-align: center;">0 文字</div>
+            
+            <h4>GitHub 同期</h4>
+            <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
+            <div class="config-input-group"><input type="text" id="gh-repo" placeholder="ユーザー名/リポジトリ名"></div>
+            <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
+            <div style="display:flex; gap:5px; margin-bottom:10px;">
+                <button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button>
+                <button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button>
+            </div>
+
+            <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
+            <div id="chapter-list" class="chapter-list"></div>
+            <div style="display:flex; gap:5px; margin-bottom:15px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
+
+            <label style="font-size:11px; font-weight:bold;">履歴</label>
+            <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
+            <div id="snapshot-list" class="config-list"></div>
+
+            <label style="font-size:11px; font-weight:bold;">自動置換</label>
+            <div id="replace-list" class="config-list"></div>
+            <div class="config-input-group"><input type="text" id="rep-from" placeholder="前"><input type="text" id="rep-to" placeholder="後"><button onclick="addListItem('replace')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+
+            <label style="font-size:11px; font-weight:bold;">挿入ボタン</label>
+            <div id="insert-list" class="config-list"></div>
+            <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+
+            <h4>システム</h4>
+            <div style="display:flex; gap:5px;">
+                <button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button>
+                <button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button>
+                <button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button>
+            </div>
+        </div>
+    </div>
+</main>
+<div id="preview-overlay" onclick="this.style.display='none'"></div>
+<footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
+
+<script>
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "……", value: "……"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
+    const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
+    const enc = (s) => btoa(unescape(encodeURIComponent(s)));
+    const dec = (s) => s ? decodeURIComponent(escape(atob(s))) : "";
+
+    window.onload = () => {
+        const saved = localStorage.getItem('kaku_v_final_sync');
+        if (saved) state = JSON.parse(saved);
+        document.getElementById('gh-token').value = dec(state.ghToken);
+        document.getElementById('gh-repo').value = state.ghRepo || "";
+        document.getElementById('device-name').value = state.deviceName || "";
+        document.body.setAttribute('data-theme', state.theme);
+        document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px');
+        refreshUI(); loadChapter(state.currentIdx);
+    };
+
+    function save() {
+        state.chapters[state.currentIdx].body = editor.value;
+        const targetMemos = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
+        const targetIdx = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
+        if(targetMemos[targetIdx]) targetMemos[targetIdx].content = memoArea.value;
+        state.ghToken = enc(document.getElementById('gh-token').value);
+        state.ghRepo = document.getElementById('gh-repo').value;
+        state.deviceName = document.getElementById('device-name').value;
+        localStorage.setItem('kaku_v_final_sync', JSON.stringify(state));
+        updateStats();
+    }
+
+    async function githubSync(mode) {
+        save();
+        const token = dec(state.ghToken); const repo = state.ghRepo; const path = "kakudraft_data.json";
+        if(!token || !repo) return alert("GitHub設定を入力してください");
+        const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+        const headers = { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' };
+        try {
+            const res = await fetch(url, { headers });
+            let sha = ""; let remoteData = null;
+            if (res.ok) { const json = await res.json(); sha = json.sha; remoteData = JSON.parse(decodeURIComponent(escape(atob(json.content)))); }
+            if (mode === 'up') {
+                const body = JSON.stringify({ message: "Sync from " + (state.deviceName || "Unknown"), content: enc(JSON.stringify(state)), sha: sha || undefined });
+                const upRes = await fetch(url, { method: 'PUT', headers, body });
+                if (upRes.ok) alert("アップロード完了");
+            } else {
+                if (!remoteData) return alert("データが見つかりません");
+                if (!confirm("同期しますか？現在の本文はスナップショットへ保存されます")) return;
+                takeBodySnapshot("【LOCAL】" + new Date().toLocaleString() + " " + (state.deviceName || ""));
+                state = remoteData;
+                state.ghToken = enc(token); state.ghRepo = repo; 
+                localStorage.setItem('kaku_v_final_sync', JSON.stringify(state));
+                location.reload();
+            }
+        } catch (e) { alert("エラー: " + e.message); }
+    }
+
+    function execReplace() {
+        const val = editor.value; const cursor = editor.selectionStart;
+        state.replaceRules.forEach(rule => {
+            if (val.slice(cursor - rule.from.length, cursor) === rule.from) {
+                editor.value = val.slice(0, cursor - rule.from.length) + rule.to + val.slice(cursor);
+                editor.selectionStart = editor.selectionEnd = cursor - rule.from.length + rule.to.length;
+            }
+        });
+        save();
+    }
+    editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
+    function updateHighlight() {
+        const textBefore = editor.value.substr(0, editor.selectionStart);
+        const lines = textBefore.split("\n").length;
+        const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
+        const paddingTop = parseFloat(getComputedStyle(editor).paddingTop);
+        hl.style.display = "block"; hl.style.height = lineHeight + "px";
+        hl.style.top = (paddingTop + (lines - 1) * lineHeight - editor.scrollTop) + "px";
+    }
+    ['scroll','click','keyup','focus'].forEach(ev => editor.addEventListener(ev, updateHighlight));
+    function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
+    function switchChapter(i) { save(); state.currentIdx = i; refreshUI(); loadChapter(i); }
+    function takeBodySnapshot(customName) { 
+        const name = customName || new Date().toLocaleTimeString();
+        state.chapters[state.currentIdx].snapshots.unshift({ date: name, body: editor.value }); 
+        renderSnapshots(); save(); 
+    }
+    function renderSnapshots() {
+        const snaps = state.chapters[state.currentIdx].snapshots || [];
+        document.getElementById('snapshot-list').innerHTML = snaps.map((s, i) => `<div class="config-item"><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.date}</span><button onclick="restoreBody(${i})">復元</button></div>`).join('');
+    }
+    function restoreBody(i) { if(confirm("復元しますか？")) { editor.value = state.chapters[state.currentIdx].snapshots[i].body; save(); updateHighlight(); } }
+    function switchMemoScope(scope) { save(); state.memoScope = scope; renderMemos(); }
+    function renderMemos() {
+        const m = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
+        const a = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
+        document.getElementById('memo-tabs').innerHTML = m.map((x, i) => `<div class="tab ${i === a ? 'active' : ''}" onclick="switchMemo(${i})">${x.name}</div>`).join('');
+        memoArea.value = m[a] ? m[a].content : "";
+    }
+    function switchMemo(i) { save(); if(state.memoScope === 'local') state.chapters[state.currentIdx].currentMemoIdx = i; else state.currentGlobalMemoIdx = i; renderMemos(); }
+    function addMemoTab() {
+        const name = document.getElementById('new-memo-name').value.trim() || "無題";
+        const target = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
+        target.push({name, content: ""}); document.getElementById('new-memo-name').value = ""; renderMemos();
+    }
+    function refreshUI() {
+        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
+        renderList('replace-list', state.replaceRules, 'replace');
+        renderList('insert-list', state.insertButtons, 'insert');
+        renderSnapshots(); updateButtons();
+    }
+    function renderList(id, data, type) {
+        document.getElementById(id).innerHTML = data.map((item, i) => `
+            <div class="config-item"><span style="flex:1">${item.from || item.label} → ${item.to || item.value}</span>
+            <span class="material-icons" style="font-size:16px; cursor:pointer;" onclick="removeItem('${type}', ${i})">delete_outline</span></div>
+        `).join('');
+    }
+    function addListItem(type) {
+        if (type === 'replace') {
+            const f = document.getElementById('rep-from').value, t = document.getElementById('rep-to').value;
+            if(f && t) { state.replaceRules.push({from:f, to:t}); document.getElementById('rep-from').value = ""; document.getElementById('rep-to').value = ""; }
+        } else {
+            const l = document.getElementById('ins-label').value, v = document.getElementById('ins-value').value;
+            if(l && v) { state.insertButtons.push({label:l, value:v}); document.getElementById('ins-label').value = ""; document.getElementById('ins-value').value = ""; }
+        }
+        refreshUI(); save();
+    }
+    function removeItem(type, i) { if (type === 'replace') state.replaceRules.splice(i, 1); else state.insertButtons.splice(i, 1); refreshUI(); save(); }
+    function updateButtons() {
+        const container = document.getElementById('quick-buttons'); container.innerHTML = '';
+        state.insertButtons.forEach(b => {
+            const btn = document.createElement('button'); btn.innerText = b.label;
+            btn.onclick = () => { editor.setRangeText(b.value, editor.selectionStart, editor.selectionEnd, 'end'); editor.focus(); save(); updateHighlight(); };
+            container.appendChild(btn);
+        });
+    }
+    function updateStats() { document.getElementById('stats-display').innerText = `${editor.value.length} 文字`; }
+    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open')); if(!isOpen) p.classList.add('open'); }
+    function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
+    function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }
+    function showPreview() { document.getElementById('preview-overlay').innerHTML = editor.value.replace(/\n/g, '<br>'); document.getElementById('preview-overlay').style.display = 'block'; }
+    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:""}], currentMemoIdx: 0}); state.currentIdx = state.chapters.length - 1; refreshUI(); loadChapter(state.currentIdx); }
+    function deleteChapter(i) { if(state.chapters.length <= 1 || !confirm("削除？")) return; state.chapters.splice(i, 1); state.currentIdx = 0; refreshUI(); loadChapter(0); }
+    function splitChapter() {
+        const pos = editor.selectionStart; const bodyBefore = editor.value.slice(0, pos); const bodyAfter = editor.value.slice(pos);
+        const newTitle = prompt("続話のタイトル:", state.chapters[state.currentIdx].title + " (続)"); if (!newTitle) return;
+        save(); state.chapters[state.currentIdx].body = bodyBefore;
+        state.chapters.splice(state.currentIdx + 1, 0, { title: newTitle, body: bodyAfter, memos: [{name:"メモ", content:""}], currentMemoIdx: 0, snapshots: [] });
+        state.currentIdx++; refreshUI(); loadChapter(state.currentIdx);
+    }
+    function mergeChapter() { if (state.currentIdx === 0 || !confirm("前の話と統合しますか？")) return; save(); state.chapters[state.currentIdx - 1].body += "\n" + editor.value; state.chapters.splice(state.currentIdx, 1); state.currentIdx--; refreshUI(); loadChapter(state.currentIdx); }
+    memoArea.oninput = save;
+</script>
+</body>
+</html>

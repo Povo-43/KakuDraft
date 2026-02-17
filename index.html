@@ -179,10 +179,13 @@
                 const jsonStr = JSON.stringify(state);
                 const bytes = new TextEncoder().encode(jsonStr);
                 let binary = "";
-                bytes.forEach(b => binary += String.fromCharCode(b));
+                const chunkSize = 0x8000; // 32KBずつ
+                for (let i = 0; i < bytes.length; i += chunkSize) {
+                    const chunk = bytes.subarray(i, i + chunkSize);
+                    binary += String.fromCharCode(...chunk);
+                }
                 const content = btoa(binary);
-
-
+                
                 const body = {
                     message: `Sync from ${state.deviceName || "Unknown"}`,
                     content

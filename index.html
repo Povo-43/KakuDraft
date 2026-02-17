@@ -149,10 +149,34 @@
             }
 
             if (mode === 'up') {
-                const body = JSON.stringify({ message: "Sync from " + (state.deviceName || "Unknown"), content: enc(JSON.stringify(state)), sha: sha || undefined });
-                const upRes = await fetch(url, { method: 'PUT', headers, body });
-                if (upRes.ok) alert("GitHubへアップロード完了");
-                else alert("アップロード失敗");
+                const encodedContent = btoa(
+                    new TextEncoder().encode(JSON.stringify(state))
+                        .reduce((data, byte) => data + String.fromCharCode(byte), '')
+                );
+            
+                const payload = {
+                    message: "Sync from " + (state.deviceName || "Unknown"),
+                    content: encodedContent
+                };
+            
+                if (sha) {
+                    payload.sha = sha;
+                }
+            
+                const upRes = await fetch(url, {
+                    method: 'PUT',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+            
+                const result = await upRes.json();
+            
+                if (upRes.ok) {
+                    alert("GitHubへアップロード完了");
+                } else {
+                    alert("アップロード失敗:\n" + (result.message || "unknown error"));
+                    console.error(result);
+                }
             } else {
                 if (!remoteData) return alert("GitHub上に kakudraft_data.json が見つかりません。先にUPしてください。");
                 if (!confirm("リモートデータで環境を復元しますか？\n現在の本文は【バックアップ】として履歴に残ります。")) return;

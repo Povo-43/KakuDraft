@@ -477,12 +477,12 @@ async function githubSync(mode) {
         // ======================
         case "s":
             e.preventDefault();
-
+        
             // ローカル保存
             save();
-
+        
             // GitHubバックアップ（設定があれば）
-            if (state.github && state.github.token && state.github.repo) {
+            if (state.ghToken && state.ghRepo) {
                 try {
                     await githubSync("up");
                     console.log("Saved + GitHub backup complete");

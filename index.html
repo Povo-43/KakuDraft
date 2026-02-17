@@ -50,8 +50,8 @@
     
     <div id="memo-panel" class="side-panel">
         <div style="font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px;">
-            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● LOCAL</span>
-            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● GLOBAL</span>
+            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話</span>
+            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div style="display: flex; border-bottom: 1px solid var(--border);"><input type="text" id="new-memo-name" placeholder="＋メモ名" style="flex:1; border:none; padding:10px; font-size:11px; background:var(--input-bg); color:var(--text);"><button onclick="addMemoTab()" style="border:none; background:var(--panel); border-left:1px solid var(--border); width:50px; cursor:pointer; color:var(--text);"><span class="material-icons">add</span></button></div>
@@ -339,7 +339,26 @@
             container.appendChild(btn);
         });
     }
-    function updateStats() { document.getElementById('stats-display').innerText = `${editor.value.length} 文字`; }
+    function updateStats() {
+        const rawText = editor.value;
+        const totalChars = rawText.length;
+        const readableText = rawText.replace(/[\s\u3000]/g, "");
+        const readableChars = readableText.length;
+        const charsPerMinute = 600; // 日本語想定
+        const minutes = readableChars / charsPerMinute;
+        let readingText;
+        if (minutes < 1) {
+            const seconds = Math.max(1, Math.round(minutes * 60));
+            readingText = `約 ${seconds} 秒`;
+        } else {
+            const min = Math.floor(minutes);
+            const sec = Math.round((minutes - min) * 60);
+            readingText = sec > 0
+                ? `約 ${min} 分 ${sec} 秒`
+                : `約 ${min} 分`;
+        }
+        document.getElementById('stats-display').innerText = `${totalChars} 文字（実質 ${readableChars}）｜ 読了 ${readingText}`;
+    }
     function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open')); if(!isOpen) p.classList.add('open'); }
     function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
     function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }

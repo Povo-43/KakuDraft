@@ -103,7 +103,7 @@
 <footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
 
 <script>
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "……", value: "……"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
     const enc = (s) => btoa(unescape(encodeURIComponent(s)));
     const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
@@ -246,13 +246,62 @@
     }
     editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
     function updateHighlight() {
-        const textBefore = editor.value.substr(0, editor.selectionStart);
-        const lines = textBefore.split("\n").length;
-        const lineHeight = parseFloat(getComputedStyle(editor).lineHeight);
-        const paddingTop = parseFloat(getComputedStyle(editor).paddingTop);
-        hl.style.display = "block"; hl.style.height = lineHeight + "px";
-        hl.style.top = (paddingTop + (lines - 1) * lineHeight - editor.scrollTop) + "px";
+
+        const div = document.createElement("div");
+        const style = getComputedStyle(editor);
+
+        // 必要なスタイルだけコピー（全部コピーはズレやすい）
+        const properties = [
+            "boxSizing",
+            "width",
+            "height",
+            "fontSize",
+            "fontFamily",
+            "fontWeight",
+            "lineHeight",
+            "paddingTop",
+            "paddingRight",
+            "paddingBottom",
+            "paddingLeft",
+            "borderTopWidth",
+            "borderRightWidth",
+            "borderBottomWidth",
+            "borderLeftWidth",
+            "whiteSpace",
+            "wordWrap"
+        ];
+
+        properties.forEach(prop => {
+            div.style[prop] = style[prop];
+        });
+
+        div.style.position = "absolute";
+        div.style.visibility = "hidden";
+        div.style.whiteSpace = "pre-wrap";
+        div.style.wordWrap = "break-word";
+        div.style.overflow = "hidden";
+
+        div.textContent = editor.value.substring(0, editor.selectionStart);
+
+        const span = document.createElement("span");
+        span.textContent = editor.value.substring(editor.selectionStart) || ".";
+        div.appendChild(span);
+
+        document.body.appendChild(div);
+
+        const lineHeight = parseFloat(style.lineHeight);
+
+        const top =
+            span.offsetTop
+            - editor.scrollTop;
+
+        document.body.removeChild(div);
+
+        hl.style.display = "block";
+        hl.style.height = lineHeight + "px";
+        hl.style.top = top + "px";
     }
+
     ['scroll','click','keyup','focus'].forEach(ev => editor.addEventListener(ev, updateHighlight));
     function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
     function switchChapter(i) { save(); state.currentIdx = i; refreshUI(); loadChapter(i); }
@@ -466,45 +515,6 @@
             }
             break;
 
-
-        // ======================
-        // 語彙挿入1（Ctrl+1）
-        // ======================
-        case "1":
-            e.preventDefault();
-
-            if (state.insertButtons?.[0]) {
-                editor.setRangeText(
-                    state.insertButtons[0].value,
-                    editor.selectionStart,
-                    editor.selectionEnd,
-                    "end"
-                );
-                editor.focus();
-                save();
-                updateHighlight();
-            }
-            break;
-
-
-        // ======================
-        // 語彙挿入2（Ctrl+2）
-        // ======================
-        case "2":
-            e.preventDefault();
-
-            if (state.insertButtons?.[1]) {
-                editor.setRangeText(
-                    state.insertButtons[1].value,
-                    editor.selectionStart,
-                    editor.selectionEnd,
-                    "end"
-                );
-                editor.focus();
-                save();
-                updateHighlight();
-            }
-            break;
     }
 });
 </script>

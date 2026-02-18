@@ -481,18 +481,16 @@ async function githubSync(mode) {
         // ======================
         case "s":
             e.preventDefault();
-        
-            // ローカル保存
+
             save();
-        
-            // GitHubバックアップ（設定があれば）
+
             if (state.ghToken && state.ghRepo) {
-                try 
+                try {
                     clearTimeout(syncTimer);
                     syncTimer = setTimeout(() => {
-                        await githubSync("up");
+                        githubSync("up");
                     }, 2000);
-                    console.log("Saved + GitHub backup complete");
+                    console.log("Saved + GitHub backup scheduled");
                 } catch (err) {
                     console.error("GitHub backup failed:", err);
                 }

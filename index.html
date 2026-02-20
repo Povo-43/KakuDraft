@@ -687,6 +687,23 @@
             box.checked = shouldCheck;
         });
     }
+    function renderDownloadTargets() {
+        const selectedIndexes = new Set(getSelectedChapterIndexes());
+        const container = document.getElementById('download-target-list');
+        if (!container) return;
+        container.innerHTML = state.chapters.map((ch, i) => {
+            const checked = selectedIndexes.size === 0 || selectedIndexes.has(i) ? 'checked' : '';
+            return `<label class="config-item" style="cursor:pointer;"><input id="download-target-${i}" type="checkbox" ${checked}><span style="flex:1;">${ch.title}</span></label>`;
+        }).join('');
+    }
+    function toggleSelectAllDownloadTargets() {
+        const checkboxes = Array.from(document.querySelectorAll('[id^="download-target-"]'));
+        if (checkboxes.length === 0) return;
+        const shouldCheck = checkboxes.some((box) => !box.checked);
+        checkboxes.forEach((box) => {
+            box.checked = shouldCheck;
+        });
+    }
     function renderList(id, data, type) {
         document.getElementById(id).innerHTML = data.map((item, i) => `
             <div class="config-item"><span style="flex:1">${item.from || item.label} → ${item.to || item.value}</span>

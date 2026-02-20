@@ -19,7 +19,7 @@
     <style>
         :root { --bg: #fcfaf2; --text: #333; --border: #000; --panel: #fff; --input-bg: #fff; --hl: rgba(0,0,0,0.05); --editor-size: 18px; }
         [data-theme="dark"] { --bg: #121212; --text: #e0e0e0; --border: #444; --panel: #1e1e1e; --input-bg: #2a2a2a; --hl: rgba(255,255,255,0.08); }
-        body { margin: 0; font-family: "Sawarabi Mincho", serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+        body { margin: 0; font-family: 'Sawarabi Mincho', serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
         main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; }
         #editor-container { flex: 1; display: flex; flex-direction: column; position: relative; width: 100%; }
         #editor { flex: 1; padding: 40px 10%; font-size: var(--editor-size); line-height: 1.7; border: none; outline: none; background: transparent; color: var(--text); resize: none; overflow-y: auto; width: 100%; box-sizing: border-box; z-index: 2; }
@@ -77,6 +77,8 @@
             <div class="menu-tab-panel" id="menu-tab-favorites">
                 <h4>お気に入り機能</h4>
                 <div id="favorite-actions" class="config-list"></div>
+                <label style="font-size:11px; font-weight:bold;">お気に入り順序</label>
+                <div id="favorite-order-list" class="config-list"></div>
                 <label style="font-size:11px; font-weight:bold;">お気に入り登録</label>
                 <div id="favorite-selector" class="config-list"></div>
             </div>
@@ -106,7 +108,7 @@
                 <h4>表示設定</h4>
                 <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div>
                 <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
-                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value=""Sawarabi Mincho", serif">Sawarabi Mincho</option><option value=""Noto Serif JP", serif">Noto Serif JP</option><option value=""Noto Sans JP", sans-serif">Noto Sans JP</option><option value=""M PLUS 1p", sans-serif">M PLUS 1p</option></select>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
             </div>
 
             <div class="menu-tab-panel" id="menu-tab-backup" style="display:none;">
@@ -124,8 +126,10 @@
 
             <div class="menu-tab-panel" id="menu-tab-analytics" style="display:none;">
                 <h4>執筆統計</h4>
+                <canvas id="writing-graph" width="300" height="120" style="width:100%; border:1px solid var(--border); background:var(--input-bg); margin-bottom:8px;"></canvas>
                 <div id="session-stats" class="config-list"></div>
                 <div id="top-words" class="config-list"></div>
+                <div id="other-stats" class="config-list"></div>
             </div>
         </div>
     </div>
@@ -152,7 +156,7 @@
     let toastTimer;
     let persistTimer;
 
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: '"Sawarabi Mincho", serif', writingSessions: [] };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [] };
 
     function showToast(message, type = 'info') {
         if (!toastEl) return;
@@ -343,9 +347,9 @@
         document.getElementById('device-name').value = state.deviceName || "";
         document.body.setAttribute('data-theme', state.theme);
         document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px');
-        document.body.style.fontFamily = state.fontFamily || '"Sawarabi Mincho", serif';
+        document.body.style.fontFamily = state.fontFamily || "'Sawarabi Mincho', serif";
         const fontSel = document.getElementById('font-family');
-        if (fontSel) fontSel.value = state.fontFamily || '"Sawarabi Mincho", serif';
+        if (fontSel) fontSel.value = state.fontFamily || "'Sawarabi Mincho', serif";
         updateOnlineFontUI();
         refreshUI(); loadChapter(state.currentIdx);
     };
@@ -479,7 +483,6 @@
                 editor.selectionStart = editor.selectionEnd = cursor - rule.from.length + rule.to.length;
             }
         });
-        save();
     }
     editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
     function updateHighlight() {
@@ -497,7 +500,7 @@
 
     ['scroll','click','keyup','focus','input'].forEach(ev => editor.addEventListener(ev, updateHighlight));
     function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
-    function switchChapter(i) { save(); state.currentIdx = i; refreshUI(); loadChapter(i); }
+    function switchChapter(i) { const idx = Number(i); if (Number.isNaN(idx) || idx < 0 || idx >= state.chapters.length) return; save(); state.currentIdx = idx; refreshUI(); loadChapter(idx); showToast(`「${state.chapters[idx].title}」へ切替`, 'success'); }
     function takeBodySnapshot(customName) {
         const name = customName || new Date().toLocaleTimeString();
         if(!state.chapters[state.currentIdx].snapshots) state.chapters[state.currentIdx].snapshots = [];
@@ -562,7 +565,7 @@
             }
         }
         renderMemos();
-        save();
+        queuePersist();
     }
     function switchMemo(i) { save(); if(state.memoScope === 'local') state.chapters[state.currentIdx].currentMemoIdx = i; else state.currentGlobalMemoIdx = i; renderMemos(); }
     function addMemoTab() {
@@ -592,7 +595,12 @@
         'split': { label: '話を分割', run: () => splitChapter() },
         'merge': { label: '話を統合', run: () => mergeChapter() },
         'show-search': { label: '検索&置換を開く', run: () => toggleSearchPanel(true) },
-        'export-json': { label: 'JSON出力', run: () => exportFullData() }
+        'export-json': { label: 'JSON出力', run: () => exportFullData() },
+        'open-chapter-tab': { label: '話管理タブを開く', run: () => switchMenuTab('chapters') },
+        'open-analytics-tab': { label: '統計タブを開く', run: () => switchMenuTab('analytics') },
+        'next-chapter': { label: '次の話へ', run: () => switchChapter(Math.min(state.currentIdx + 1, state.chapters.length - 1)) },
+        'prev-chapter': { label: '前の話へ', run: () => switchChapter(Math.max(state.currentIdx - 1, 0)) },
+        'refresh-analytics': { label: '統計更新', run: () => renderAnalytics() }
     };
     function switchMenuTab(tab) {
         state.menuTab = tab;
@@ -602,7 +610,7 @@
         ['favorites','chapters','settings','backup','analytics'].forEach((name) => {
             document.getElementById(`menu-tab-${name}`).style.display = name === tab ? 'block' : 'none';
         });
-        save();
+        queuePersist();
     }
     function renderFavorites() {
         const selected = new Set(state.favoriteActionKeys || []);
@@ -611,11 +619,24 @@
         `).join('');
         const actions = (state.favoriteActionKeys || []).filter((k) => favoriteActionDefs[k]);
         document.getElementById('favorite-actions').innerHTML = actions.map((k) => `<button class="sys-btn" onclick="favoriteActionDefs['${k}'].run()">${favoriteActionDefs[k].label}</button>`).join('') || '<div class="config-item">機能を選んでください</div>';
+        document.getElementById('favorite-order-list').innerHTML = actions.map((k, i) => `<div class="config-item"><span style="flex:1">${favoriteActionDefs[k].label}</span><button onclick="moveFavoriteAction(${i},-1)">↑</button><button onclick="moveFavoriteAction(${i},1)">↓</button></div>`).join('') || '<div class="config-item">順序設定対象なし</div>';
     }
     function toggleFavoriteAction(key, checked) {
-        const list = new Set(state.favoriteActionKeys || []);
-        if (checked) list.add(key); else list.delete(key);
-        state.favoriteActionKeys = Array.from(list);
+        const list = state.favoriteActionKeys || [];
+        if (checked) {
+            if (!list.includes(key)) list.push(key);
+        } else {
+            state.favoriteActionKeys = list.filter((x) => x !== key);
+        }
+        if (checked) state.favoriteActionKeys = list;
+        renderFavorites(); save();
+    }
+    function moveFavoriteAction(i, delta) {
+        const list = state.favoriteActionKeys || [];
+        const ni = i + delta;
+        if (ni < 0 || ni >= list.length) return;
+        [list[i], list[ni]] = [list[ni], list[i]];
+        state.favoriteActionKeys = list;
         renderFavorites(); save();
     }
     async function changeFontFamily(fontValue) {
@@ -631,10 +652,10 @@
     }
     async function cacheFontAssets(fontValue) {
         const map = {
-            '"Noto Serif JP", serif': 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap',
-            '"Noto Sans JP", sans-serif': 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap',
-            '"M PLUS 1p", sans-serif': 'https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700&display=swap',
-            '"Sawarabi Mincho", serif': 'https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap'
+            "'Noto Serif JP', serif": 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap',
+            "'Noto Sans JP', sans-serif": 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap',
+            "'M PLUS 1p', sans-serif": 'https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700&display=swap',
+            "'Sawarabi Mincho', serif": 'https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap'
         };
         const cssUrl = map[fontValue];
         if (!cssUrl || !('caches' in window)) return;
@@ -662,30 +683,13 @@
     window.addEventListener('offline', updateOnlineFontUI);
 
     function refreshUI() {
-        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="renameChapter(${i})">✎</span><span onclick="moveChapter(${i},-1)">↑</span><span onclick="moveChapter(${i},1)">↓</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
+        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}</button><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;">✎</button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;">↑</button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;">↓</button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;">×</button></div>`).join('');
         renderDownloadTargets();
         renderList('replace-list', state.replaceRules || [], 'replace');
         renderList('insert-list', state.insertButtons || [], 'insert');
         renderSnapshots(); updateButtons(); renderFavorites();
         switchMenuTab(state.menuTab || 'favorites');
         updateStats();
-    }
-    function renderDownloadTargets() {
-        const selectedIndexes = new Set(getSelectedChapterIndexes());
-        const container = document.getElementById('download-target-list');
-        if (!container) return;
-        container.innerHTML = state.chapters.map((ch, i) => {
-            const checked = selectedIndexes.size === 0 || selectedIndexes.has(i) ? 'checked' : '';
-            return `<label class="config-item" style="cursor:pointer;"><input id="download-target-${i}" type="checkbox" ${checked}><span style="flex:1;">${ch.title}</span></label>`;
-        }).join('');
-    }
-    function toggleSelectAllDownloadTargets() {
-        const checkboxes = Array.from(document.querySelectorAll('[id^="download-target-"]'));
-        if (checkboxes.length === 0) return;
-        const shouldCheck = checkboxes.some((box) => !box.checked);
-        checkboxes.forEach((box) => {
-            box.checked = shouldCheck;
-        });
     }
     function renderDownloadTargets() {
         const selectedIndexes = new Set(getSelectedChapterIndexes());
@@ -757,11 +761,36 @@
     }
     function renderAnalytics() {
         const sessions = state.writingSessions || [];
-        const points = sessions.slice(-20).map((s) => `${new Date(s.t).toLocaleDateString().slice(5)}:${s.c}`).join(' / ');
+        const recent = sessions.slice(-14);
+        const points = recent.map((s) => `${new Date(s.t).toLocaleDateString().slice(5)}:${s.c}`).join(' / ');
         document.getElementById('session-stats').innerHTML = `<div class="config-item" style="white-space:normal;">最近の文字数推移: ${points || 'データなし'}</div>`;
+
+        const cvs = document.getElementById('writing-graph');
+        if (cvs) {
+            const ctx = cvs.getContext('2d');
+            const w = cvs.width, h = cvs.height;
+            ctx.clearRect(0, 0, w, h);
+            ctx.strokeStyle = '#999';
+            ctx.strokeRect(0, 0, w, h);
+            const vals = recent.map((x) => x.c);
+            const max = Math.max(1, ...vals);
+            const bw = vals.length ? w / vals.length : w;
+            ctx.fillStyle = '#607d8b';
+            vals.forEach((v, i) => {
+                const bh = Math.max(2, (v / max) * (h - 20));
+                ctx.fillRect(i * bw + 2, h - bh - 2, Math.max(2, bw - 4), bh);
+            });
+        }
+
         const words = (editor.value.match(/[一-龠ぁ-んァ-ヶA-Za-z0-9]{2,}/g) || []).reduce((acc, w) => (acc[w]=(acc[w]||0)+1, acc), {});
-        const top = Object.entries(words).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([w,c])=>`${w}(${c})`).join(' / ');
+        const topEntries = Object.entries(words).sort((a,b)=>b[1]-a[1]).slice(0,8);
+        const top = topEntries.map(([w,c])=>`${w}(${c})`).join(' / ');
         document.getElementById('top-words').innerHTML = `<div class="config-item" style="white-space:normal;">頻出語: ${top || 'データなし'}</div>`;
+
+        const paragraphCount = editor.value.split(/\n{2,}/).filter(Boolean).length;
+        const sentenceCount = (editor.value.match(/[。！？!?]/g) || []).length;
+        const avgSentence = sentenceCount ? Math.round(editor.value.replace(/\s/g, '').length / sentenceCount) : 0;
+        document.getElementById('other-stats').innerHTML = `<div class="config-item" style="white-space:normal;">段落数: ${paragraphCount} / 文数: ${sentenceCount} / 1文平均: ${avgSentence}文字</div>`;
     }
     function toggleSearchPanel(forceOpen = false) {
         const p = document.getElementById('search-panel');

@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="./icon.png">
     <link rel="apple-touch-icon" href="./icon.png">
     <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -42,6 +43,10 @@
         .sys-btn { width: 100%; border: 1px solid var(--border); height: 35px; margin-bottom: 5px; font-size: 11px; background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
         h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; }
         #preview-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); display: none; overflow-y: auto; padding: 60px 20%; z-index: 200; box-sizing: border-box; line-height: 1.7; }
+        #toast { position: fixed; left: 50%; bottom: calc(58px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(12px); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 10px 14px; font-size: 12px; max-width: min(90vw, 520px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 300; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { border-color: #2e7d32; }
+        #toast.error { border-color: #c62828; }
     </style>
 </head>
 <body data-theme="light">
@@ -60,66 +65,288 @@
 
     <div id="menu-panel" class="side-panel">
         <div class="panel-content">
-            <div id="stats-display" style="font-size: 13px; padding: 10px; border: 1px solid var(--border); margin-bottom: 20px; background: var(--input-bg); text-align: center;">0 文字</div>
-            
-            <h4>GitHub 同期</h4>
-            <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
-            <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名"></div>
-            <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
-            <div style="display:flex; gap:5px; margin-bottom:10px;">
-                <button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button>
-                <button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button>
+            <div id="stats-display" style="font-size: 13px; padding: 10px; border: 1px solid var(--border); margin-bottom: 12px; background: var(--input-bg); text-align: center;">0 文字</div>
+            <div class="tab-bar" id="menu-tabs" style="margin-bottom:10px; border:1px solid var(--border);">
+                <div class="tab active" data-tab="favorites" onclick="switchMenuTab('favorites')">お気に入り</div>
+                <div class="tab" data-tab="chapters" onclick="switchMenuTab('chapters')">話管理</div>
+                <div class="tab" data-tab="settings" onclick="switchMenuTab('settings')">設定</div>
+                <div class="tab" data-tab="backup" onclick="switchMenuTab('backup')">バックアップ</div>
+                <div class="tab" data-tab="analytics" onclick="switchMenuTab('analytics')">統計</div>
             </div>
 
-            <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
-            <div id="chapter-list" class="chapter-list"></div>
-            <div style="display:flex; gap:5px; margin-bottom:15px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
-
-            <label style="font-size:11px; font-weight:bold;">履歴</label>
-            <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
-            <div id="snapshot-list" class="config-list"></div>
-
-            <label style="font-size:11px; font-weight:bold;">自動置換</label>
-            <div id="replace-list" class="config-list"></div>
-            <div class="config-input-group"><input type="text" id="rep-from" placeholder="前"><input type="text" id="rep-to" placeholder="後"><button onclick="addListItem('replace')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
-
-            <label style="font-size:11px; font-weight:bold;">挿入ボタン</label>
-            <div id="insert-list" class="config-list"></div>
-            <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
-
-            <h4>システム</h4>
-            <div style="display:flex; gap:5px;">
-                <button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button>
-                <button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button>
-                <button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button>
+            <div class="menu-tab-panel" id="menu-tab-favorites">
+                <h4>お気に入り機能</h4>
+                <div id="favorite-actions" class="config-list"></div>
+                <label style="font-size:11px; font-weight:bold;">お気に入り登録</label>
+                <div id="favorite-selector" class="config-list"></div>
             </div>
-            <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
-            <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
-            <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
+
+            <div class="menu-tab-panel" id="menu-tab-chapters" style="display:none;">
+                <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
+                <div id="chapter-list" class="chapter-list"></div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
+                <h4>ダウンロード</h4>
+                <button class="sys-btn" onclick="toggleSelectAllDownloadTargets()">すべて選択 / 解除</button>
+                <div id="download-target-list" class="config-list"></div>
+                <button class="sys-btn" onclick="downloadSelectedZip()"><span class="material-icons" style="font-size:16px;">folder_zip</span> ZIPダウンロード</button>
+                <button class="sys-btn" onclick="downloadSelectedMergedTxt()"><span class="material-icons" style="font-size:16px;">description</span> 結合TXTダウンロード</button>
+                <label style="font-size:11px; font-weight:bold;">履歴</label>
+                <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
+                <div id="snapshot-list" class="config-list"></div>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-settings" style="display:none;">
+                <h4>置換・挿入</h4>
+                <label style="font-size:11px; font-weight:bold;">自動置換</label>
+                <div id="replace-list" class="config-list"></div>
+                <div class="config-input-group"><input type="text" id="rep-from" placeholder="前"><input type="text" id="rep-to" placeholder="後"><button onclick="addListItem('replace')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+                <label style="font-size:11px; font-weight:bold;">挿入ボタン</label>
+                <div id="insert-list" class="config-list"></div>
+                <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+                <h4>表示設定</h4>
+                <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div>
+                <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value=""Sawarabi Mincho", serif">Sawarabi Mincho</option><option value=""Noto Serif JP", serif">Noto Serif JP</option><option value=""Noto Sans JP", sans-serif">Noto Sans JP</option><option value=""M PLUS 1p", sans-serif">M PLUS 1p</option></select>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-backup" style="display:none;">
+                <h4>GitHub 同期</h4>
+                <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
+                <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名 or owner/repo"></div>
+                <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button><button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button></div>
+                <h4>エクスポート</h4>
+                <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
+                <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
+                <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:16px;">help</span> ヘルプ</button>
+                <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-analytics" style="display:none;">
+                <h4>執筆統計</h4>
+                <div id="session-stats" class="config-list"></div>
+                <div id="top-words" class="config-list"></div>
+            </div>
+        </div>
+    </div>
         </div>
     </div>
 </main>
 <div id="preview-overlay" onclick="this.style.display='none'"></div>
-<footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="search-panel" style="position:fixed; top:12px; right:12px; width:min(92vw,380px); border:1px solid var(--border); background:var(--panel); padding:10px; z-index:280; display:none;">
+  <div style="display:flex; gap:6px; margin-bottom:6px;"><input id="search-query" placeholder="検索" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"><input id="replace-query" placeholder="置換" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></div>
+  <div style="display:flex; gap:6px;"><button class="sys-btn" onclick="findNext()" style="margin:0;">次を検索</button><button class="sys-btn" onclick="replaceCurrent()" style="margin:0;">置換</button><button class="sys-btn" onclick="replaceAllMatches()" style="margin:0;">すべて置換</button></div>
+</div>
+<footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="toggleSearchPanel()"><span class="material-icons">find_replace</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
 
 <script>
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
-    const enc = (s) => btoa(unescape(encodeURIComponent(s)));
-    const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
-    let syncTimer;    
+    const DB_NAME = 'kakudraft-db';
+    const DB_VERSION = 1;
+    const STATE_KEY = 'app-state';
+    const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
+    const REPO_DATA_PATH = 'kakudraft_data.json';
+    const toastEl = document.getElementById('toast');
+    let syncTimer;
+    let toastTimer;
+    let persistTimer;
 
-    window.onload = () => {
-        const saved = localStorage.getItem('kaku_v_pro_sync');
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: '"Sawarabi Mincho", serif', writingSessions: [] };
+
+    function showToast(message, type = 'info') {
+        if (!toastEl) return;
+        toastEl.textContent = message;
+        toastEl.className = `${type ? type + ' ' : ''}show`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toastEl.className = '';
+        }, 2800);
+    }
+
+    function closePanels() {
+        document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open'));
+    }
+
+    function sanitizeFileName(name) {
+        return (name || 'untitled').replace(/[\\/:*?"<>|]/g, '_');
+    }
+
+    function createUtf8TextBlob(text) {
+        return new Blob(['﻿', text || ''], { type: 'text/plain;charset=utf-8' });
+    }
+
+    function createUtf8BytesWithBom(text) {
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const body = new TextEncoder().encode(text || '');
+        const bytes = new Uint8Array(bom.length + body.length);
+        bytes.set(bom, 0);
+        bytes.set(body, bom.length);
+        return bytes;
+    }
+
+    function triggerDownload(blob, filename) {
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function getSelectedChapterIndexes() {
+        return state.chapters.map((_, i) => i).filter((i) => {
+            const checkbox = document.getElementById(`download-target-${i}`);
+            return checkbox && checkbox.checked;
+        });
+    }
+
+    function openDb() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+                if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' });
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function dbGet(storeName, key) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const request = tx.objectStore(storeName).get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function dbPut(storeName, value, key) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const request = key === undefined ? store.put(value) : store.put(value, key);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function addLocalSnapshot(label, data) {
+        const snapshot = {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            date: new Date().toISOString(),
+            label,
+            data
+        };
+        await dbPut('snapshots', snapshot);
+    }
+
+    async function deriveTokenKey(deviceName) {
+        const secret = `kakudraft-lite-secret::${location.origin}::${deviceName || 'default-device'}`;
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+        return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    }
+
+    async function encryptPatToken(token, deviceName) {
+        if (!token || !window.crypto?.subtle) return '';
+        const key = await deriveTokenKey(deviceName);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(token));
+        const payload = {
+            iv: Array.from(iv),
+            data: Array.from(new Uint8Array(encrypted))
+        };
+        return btoa(JSON.stringify(payload));
+    }
+
+    async function decryptPatToken(payloadB64, deviceName) {
+        if (!payloadB64 || !window.crypto?.subtle) return '';
+        try {
+            const payload = JSON.parse(atob(payloadB64));
+            const key = await deriveTokenKey(deviceName);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: new Uint8Array(payload.iv) },
+                key,
+                new Uint8Array(payload.data)
+            );
+            return new TextDecoder().decode(decrypted);
+        } catch {
+            return '';
+        }
+    }
+
+    function parseRepoTarget(rawRepo, fallbackOwner) {
+        const cleaned = (rawRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/^\/+|\/+$/g, '');
+        if (!cleaned) return null;
+        if (cleaned.includes('/')) {
+            const [owner, repo] = cleaned.split('/');
+            return owner && repo ? { owner, repo } : null;
+        }
+        return fallbackOwner ? { owner: fallbackOwner, repo: cleaned } : null;
+    }
+
+    async function requestJson(url, options = {}) {
+        const res = await fetch(url, options);
+        let body;
+        try { body = await res.json(); } catch { body = null; }
+        return { res, body };
+    }
+
+    async function persistNow() {
+        const tokenPlain = document.getElementById('gh-token').value || '';
+        state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
+        state.ghTokenLegacy = '';
+        await dbPut('kv', JSON.stringify(state), STATE_KEY);
+    }
+
+    function queuePersist() {
+        clearTimeout(persistTimer);
+        persistTimer = setTimeout(async () => {
+            try {
+                await persistNow();
+            } catch (e) {
+                console.error(e);
+                showToast('保存に失敗しました（再試行してください）', 'error');
+            }
+        }, 60);
+    }
+
+    async function loadPersistedState() {
+        const saved = await dbGet('kv', STATE_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
             state = Object.assign(state, parsed);
+            return;
         }
-        document.getElementById('gh-token').value = dec(state.ghToken);
+        const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacy) {
+            const parsed = JSON.parse(legacy);
+            state = Object.assign(state, parsed);
+            await dbPut('kv', JSON.stringify(state), STATE_KEY);
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            showToast('旧データを新しい保存形式へ移行しました', 'success');
+        }
+    }
+
+    window.onload = async () => {
+        await loadPersistedState();
+        let token = await decryptPatToken(state.ghTokenEnc, state.deviceName);
+        if (!token && state.ghToken) {
+            try { token = decodeURIComponent(escape(atob(state.ghToken))); } catch { token = ''; }
+        }
+        document.getElementById('gh-token').value = token;
         document.getElementById('gh-repo').value = state.ghRepo || "";
         document.getElementById('device-name').value = state.deviceName || "";
         document.body.setAttribute('data-theme', state.theme);
         document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px');
+        document.body.style.fontFamily = state.fontFamily || '"Sawarabi Mincho", serif';
+        const fontSel = document.getElementById('font-family');
+        if (fontSel) fontSel.value = state.fontFamily || '"Sawarabi Mincho", serif';
+        updateOnlineFontUI();
         refreshUI(); loadChapter(state.currentIdx);
     };
 
@@ -128,135 +355,121 @@
         const targetMemos = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
         const targetIdx = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
         if(targetMemos[targetIdx]) targetMemos[targetIdx].content = memoArea.value;
-        state.ghToken = enc(document.getElementById('gh-token').value);
-        state.ghRepo = document.getElementById('gh-repo').value;
-        state.deviceName = document.getElementById('device-name').value;
-        localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
+        state.ghRepo = document.getElementById('gh-repo').value.trim();
+        state.deviceName = document.getElementById('device-name').value.trim();
+        queuePersist();
         updateStats();
     }
 
-async function githubSync(mode) {
-    save();
-
-    const token = dec(state.ghToken);
-    const repoName = state.ghRepo?.trim();
-    const path = "kakudraft_data.json";
-
-    if (!token || !repoName) {
-        alert("GitHub設定を正しく入力してください");
-        return;
+    async function uploadRepoSnapshot(headers, owner, repo, currentState, reason) {
+        const snapshotPath = `kakudraft_snapshots/${new Date().toISOString().replace(/[:.]/g, '-')}_${sanitizeFileName(state.deviceName || 'device')}_${reason}.json`;
+        const bytes = new TextEncoder().encode(JSON.stringify(currentState));
+        let binary = "";
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const content = btoa(binary);
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${snapshotPath}`;
+        await fetch(apiUrl, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ message: `snapshot: ${reason}`, content })
+        });
     }
 
-    const headers = {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json"
-    };
+    async function githubSync(mode) {
+        save();
 
-    try {
-        // ==========================
-        // 1. login取得
-        // ==========================
-        const userRes = await fetch("https://api.github.com/user", { headers });
+        const token = document.getElementById('gh-token').value.trim();
+        const repoInput = state.ghRepo;
 
-        if (!userRes.ok) {
-            throw new Error("トークンが無効です");
+        if (!token || !repoInput) {
+            showToast('GitHub設定（PAT / リポジトリ）を入力してください', 'error');
+            return;
         }
 
-        const { login } = await userRes.json();
-        const repo = `${login}/${repoName}`;
-        const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+        const headers = {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json"
+        };
 
-        let sha = null;
-        let remoteData = null;
+        try {
+            const userRes = await requestJson("https://api.github.com/user", { headers });
+            if (!userRes.res.ok && !repoInput.includes('/')) {
+                throw new Error('ユーザー情報の取得に失敗しました。owner/repo形式で入力してください。');
+            }
 
-        // ==========================
-        // 2. 既存ファイル確認
-        // ==========================
-        const getRes = await fetch(apiUrl, { headers });
+            const fallbackOwner = userRes.body?.login;
+            const parsedRepo = parseRepoTarget(repoInput, fallbackOwner);
+            if (!parsedRepo) throw new Error('リポジトリ形式が不正です（例: owner/repo または repo）。');
 
-        if (getRes.status === 200) {
-            const json = await getRes.json();
-            sha = json.sha;
+            const { owner, repo } = parsedRepo;
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_DATA_PATH}`;
 
-            const cleaned = json.content.replace(/\n/g, "");
-            const binary = atob(cleaned);
-            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-            const decoded = new TextDecoder().decode(bytes);
-            remoteData = JSON.parse(decoded);
+            let sha = null;
+            let remoteData = null;
 
-        } else if (getRes.status !== 404) {
-            const err = await getRes.text();
-            throw new Error(`取得失敗: ${getRes.status} ${err}`);
-        }
+            const getRes = await requestJson(apiUrl, { headers });
+            if (getRes.res.status === 200) {
+                sha = getRes.body.sha;
+                const cleaned = getRes.body.content.replace(/\n/g, "");
+                const binary = atob(cleaned);
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                remoteData = JSON.parse(new TextDecoder().decode(bytes));
+            } else if (getRes.res.status !== 404) {
+                throw new Error(getRes.body?.message || `取得失敗: ${getRes.res.status}`);
+            }
 
-        // ==========================
-        // 3. アップロード
-        // ==========================
-        if (mode === "up") {
-
+            if (mode === "up") {
                 const jsonStr = JSON.stringify(state);
                 const bytes = new TextEncoder().encode(jsonStr);
                 let binary = "";
-                const chunkSize = 0x8000; // 32KBずつ
+                const chunkSize = 0x8000;
                 for (let i = 0; i < bytes.length; i += chunkSize) {
                     const chunk = bytes.subarray(i, i + chunkSize);
                     binary += String.fromCharCode(...chunk);
                 }
                 const content = btoa(binary);
-                
-                const body = {
-                    message: `Sync from ${state.deviceName || "Unknown"}`,
-                    content
-                };
 
-            if (sha) body.sha = sha;
+                const body = { message: `Sync from ${state.deviceName || "Unknown"}`, content };
+                if (sha) body.sha = sha;
 
-            const putRes = await fetch(apiUrl, {
-                method: "PUT",
-                headers,
-                body: JSON.stringify(body)
-            });
+                const putRes = await requestJson(apiUrl, { method: "PUT", headers, body: JSON.stringify(body) });
+                if (!putRes.res.ok) throw new Error(putRes.body?.message || "アップロード失敗");
 
-            const result = await putRes.json();
+                showToast('アップロード成功', 'success');
+            } else {
+                if (!remoteData) {
+                    showToast('リモートにデータがありません。先にUPしてください。', 'error');
+                    return;
+                }
 
-            if (!putRes.ok) {
-                throw new Error(result.message || "アップロード失敗");
+                if (!confirm("リモートデータで復元しますか？")) return;
+
+                await addLocalSnapshot('before-download-local', structuredClone(state));
+                uploadRepoSnapshot(headers, owner, repo, structuredClone(state), 'before-download').catch(() => {});
+
+                const oldTokenEnc = state.ghTokenEnc;
+                const oldRepo = state.ghRepo;
+                const oldDevice = state.deviceName;
+
+                state = remoteData;
+                state.ghTokenEnc = oldTokenEnc;
+                state.ghRepo = oldRepo;
+                state.deviceName = oldDevice;
+
+                await addLocalSnapshot('after-download-remote', structuredClone(state));
+                await persistNow();
+                showToast('復元完了（ローカル/リポジトリへスナップショット保存）', 'success');
+                setTimeout(() => location.reload(), 500);
             }
-
-            alert("アップロード成功");
-
-        // ==========================
-        // 4. ダウンロード
-        // ==========================
-        } else {
-
-            if (!remoteData) {
-                alert("リモートにデータがありません。先にUPしてください。");
-                return;
-            }
-
-            if (!confirm("リモートデータで復元しますか？")) return;
-
-            const oldToken = state.ghToken;
-            const oldRepo = state.ghRepo;
-            const oldDevice = state.deviceName;
-
-            state = remoteData;
-
-            state.ghToken = oldToken;
-            state.ghRepo = oldRepo;
-            state.deviceName = oldDevice;
-
-            localStorage.setItem("kaku_v_pro_sync", JSON.stringify(state));
-            alert("復元完了");
-            location.reload();
+        } catch (err) {
+            console.error(err);
+            showToast(`GitHub同期エラー: ${err.message}`, 'error');
         }
-
-    } catch (err) {
-        console.error(err);
-        alert("GitHub同期エラー:\n" + err.message);
     }
-}
 
     function execReplace() {
         const val = editor.value; const cursor = editor.selectionStart;
@@ -270,70 +483,27 @@ async function githubSync(mode) {
     }
     editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
     function updateHighlight() {
-
-        const div = document.createElement("div");
+        const pre = editor.value.substring(0, editor.selectionStart);
+        const lines = pre.split('\n');
+        const lineIndex = lines.length - 1;
         const style = getComputedStyle(editor);
-
-        // 必要なスタイルだけコピー（全部コピーはズレやすい）
-        const properties = [
-            "boxSizing",
-            "width",
-            "height",
-            "fontSize",
-            "fontFamily",
-            "fontWeight",
-            "lineHeight",
-            "paddingTop",
-            "paddingRight",
-            "paddingBottom",
-            "paddingLeft",
-            "borderTopWidth",
-            "borderRightWidth",
-            "borderBottomWidth",
-            "borderLeftWidth",
-            "whiteSpace",
-            "wordWrap"
-        ];
-
-        properties.forEach(prop => {
-            div.style[prop] = style[prop];
-        });
-
-        div.style.position = "absolute";
-        div.style.visibility = "hidden";
-        div.style.whiteSpace = "pre-wrap";
-        div.style.wordWrap = "break-word";
-        div.style.overflow = "hidden";
-
-        div.textContent = editor.value.substring(0, editor.selectionStart);
-
-        const span = document.createElement("span");
-        span.textContent = editor.value.substring(editor.selectionStart) || ".";
-        div.appendChild(span);
-
-        document.body.appendChild(div);
-
-        const lineHeight = parseFloat(style.lineHeight);
-
-        const top =
-            span.offsetTop
-            - editor.scrollTop;
-
-        document.body.removeChild(div);
-
+        const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.7;
+        const paddingTop = parseFloat(style.paddingTop) || 0;
+        const top = paddingTop + lineIndex * lineHeight - editor.scrollTop;
         hl.style.display = "block";
         hl.style.height = lineHeight + "px";
-        hl.style.top = top + "px";
+        hl.style.top = `${Math.round(top)}px`;
     }
 
-    ['scroll','click','keyup','focus'].forEach(ev => editor.addEventListener(ev, updateHighlight));
+    ['scroll','click','keyup','focus','input'].forEach(ev => editor.addEventListener(ev, updateHighlight));
     function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
     function switchChapter(i) { save(); state.currentIdx = i; refreshUI(); loadChapter(i); }
-    function takeBodySnapshot(customName) { 
+    function takeBodySnapshot(customName) {
         const name = customName || new Date().toLocaleTimeString();
         if(!state.chapters[state.currentIdx].snapshots) state.chapters[state.currentIdx].snapshots = [];
-        state.chapters[state.currentIdx].snapshots.unshift({ date: name, body: editor.value }); 
-        renderSnapshots(); save(); 
+        state.chapters[state.currentIdx].snapshots.unshift({ date: name, body: editor.value });
+        renderSnapshots(); save();
+        showToast('スナップショットを保存しました', 'success');
     }
     function renderSnapshots() {
         const snaps = state.chapters[state.currentIdx].snapshots || [];
@@ -341,12 +511,31 @@ async function githubSync(mode) {
     }
     function restoreBody(i) { if(confirm("本文を復元しますか？")) { editor.value = state.chapters[state.currentIdx].snapshots[i].body; save(); updateHighlight(); } }
     function switchMemoScope(scope) { save(); state.memoScope = scope; renderMemos(); }
+    function renameMemo(i) {
+        const target = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
+        const name = prompt('メモタイトル', target[i].name);
+        if (!name) return;
+        target[i].name = name.trim();
+        renderMemos(); save();
+    }
+    function moveMemo(i, delta) {
+        const target = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
+        const ni = i + delta;
+        if (ni < 0 || ni >= target.length) return;
+        [target[i], target[ni]] = [target[ni], target[i]];
+        if (state.memoScope === 'local') state.chapters[state.currentIdx].currentMemoIdx = ni;
+        else state.currentGlobalMemoIdx = ni;
+        renderMemos(); save();
+    }
     function renderMemos() {
         const m = state.memoScope === 'local' ? (state.chapters[state.currentIdx].memos || []) : (state.globalMemos || []);
         const a = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
         document.getElementById('memo-tabs').innerHTML = m.map((x, i) => `
             <div class="tab ${i === a ? 'active' : ''}" style="display:flex; align-items:center; gap:5px;">
                 <span style="flex:1; cursor:pointer;" onclick="switchMemo(${i})">${x.name}</span>
+                <span style="font-size:12px; cursor:pointer;" onclick="renameMemo(${i})">✎</span>
+                <span style="font-size:12px; cursor:pointer;" onclick="moveMemo(${i}, -1)">↑</span>
+                <span style="font-size:12px; cursor:pointer;" onclick="moveMemo(${i}, 1)">↓</span>
                 <span style="font-size:12px; cursor:pointer;" onclick="deleteMemo(${i})">×</span>
             </div>
         `).join('');
@@ -358,7 +547,7 @@ async function githubSync(mode) {
             ? state.chapters[state.currentIdx].memos
             : state.globalMemos;
         if (target.length <= 1) {
-            alert("最低1つは必要です。");
+            showToast("最低1つは必要です。", "error");
             return;
         }
         if (!confirm("このメモを削除しますか？")) return;
@@ -379,13 +568,124 @@ async function githubSync(mode) {
     function addMemoTab() {
         const name = document.getElementById('new-memo-name').value.trim() || "無題";
         const target = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
-        target.push({name, content: ""}); document.getElementById('new-memo-name').value = ""; renderMemos();
+        target.push({name, content: ""}); document.getElementById('new-memo-name').value = ""; renderMemos(); save();
     }
+    function moveChapter(i, delta) {
+        const ni = i + delta;
+        if (ni < 0 || ni >= state.chapters.length) return;
+        [state.chapters[i], state.chapters[ni]] = [state.chapters[ni], state.chapters[i]];
+        if (state.currentIdx === i) state.currentIdx = ni;
+        else if (state.currentIdx === ni) state.currentIdx = i;
+        refreshUI(); save();
+    }
+    function renameChapter(i) {
+        const next = prompt('話タイトル', state.chapters[i].title);
+        if (!next) return;
+        state.chapters[i].title = next.trim();
+        refreshUI(); save();
+    }
+    const favoriteActionDefs = {
+        'sync-up': { label: 'GitHub UP', run: () => githubSync('up') },
+        'sync-down': { label: 'GitHub DOWN', run: () => githubSync('down') },
+        'take-snapshot': { label: '本文スナップショット', run: () => takeBodySnapshot() },
+        'toggle-theme': { label: 'テーマ切替', run: () => toggleTheme() },
+        'split': { label: '話を分割', run: () => splitChapter() },
+        'merge': { label: '話を統合', run: () => mergeChapter() },
+        'show-search': { label: '検索&置換を開く', run: () => toggleSearchPanel(true) },
+        'export-json': { label: 'JSON出力', run: () => exportFullData() }
+    };
+    function switchMenuTab(tab) {
+        state.menuTab = tab;
+        document.querySelectorAll('#menu-tabs .tab').forEach((el) => {
+            el.classList.toggle('active', el.dataset.tab === tab);
+        });
+        ['favorites','chapters','settings','backup','analytics'].forEach((name) => {
+            document.getElementById(`menu-tab-${name}`).style.display = name === tab ? 'block' : 'none';
+        });
+        save();
+    }
+    function renderFavorites() {
+        const selected = new Set(state.favoriteActionKeys || []);
+        document.getElementById('favorite-selector').innerHTML = Object.entries(favoriteActionDefs).map(([key, def]) => `
+            <label class="config-item"><input type="checkbox" ${selected.has(key) ? 'checked' : ''} onchange="toggleFavoriteAction('${key}', this.checked)"><span>${def.label}</span></label>
+        `).join('');
+        const actions = (state.favoriteActionKeys || []).filter((k) => favoriteActionDefs[k]);
+        document.getElementById('favorite-actions').innerHTML = actions.map((k) => `<button class="sys-btn" onclick="favoriteActionDefs['${k}'].run()">${favoriteActionDefs[k].label}</button>`).join('') || '<div class="config-item">機能を選んでください</div>';
+    }
+    function toggleFavoriteAction(key, checked) {
+        const list = new Set(state.favoriteActionKeys || []);
+        if (checked) list.add(key); else list.delete(key);
+        state.favoriteActionKeys = Array.from(list);
+        renderFavorites(); save();
+    }
+    async function changeFontFamily(fontValue) {
+        if (!navigator.onLine) {
+            showToast('フォント変更はオンライン時のみ利用できます。', 'error');
+            return;
+        }
+        state.fontFamily = fontValue;
+        document.body.style.fontFamily = fontValue;
+        save();
+        await cacheFontAssets(fontValue);
+        showToast('フォントを変更しました（オフライン用キャッシュを試行）', 'success');
+    }
+    async function cacheFontAssets(fontValue) {
+        const map = {
+            '"Noto Serif JP", serif': 'https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700&display=swap',
+            '"Noto Sans JP", sans-serif': 'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap',
+            '"M PLUS 1p", sans-serif': 'https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700&display=swap',
+            '"Sawarabi Mincho", serif': 'https://fonts.googleapis.com/css2?family=Sawarabi+Mincho&display=swap'
+        };
+        const cssUrl = map[fontValue];
+        if (!cssUrl || !('caches' in window)) return;
+        const cache = await caches.open('kakudraft-font-cache-v1');
+        const cssRes = await fetch(cssUrl);
+        await cache.put(cssUrl, cssRes.clone());
+        const cssText = await cssRes.text();
+        const fontUrls = [...cssText.matchAll(/url\((https:[^)]+)\)/g)].map((m) => m[1]);
+        for (const url of fontUrls) {
+            try {
+                const res = await fetch(url, { mode: 'cors' });
+                await cache.put(url, res);
+            } catch {}
+        }
+    }
+    function updateOnlineFontUI() {
+        const sel = document.getElementById('font-family');
+        const label = document.getElementById('font-online-label');
+        if (!sel || !label) return;
+        const on = navigator.onLine;
+        sel.disabled = !on;
+        label.textContent = on ? 'フォント（オンライン時のみ）' : 'フォント（オフライン中: 変更不可）';
+    }
+    window.addEventListener('online', updateOnlineFontUI);
+    window.addEventListener('offline', updateOnlineFontUI);
+
     function refreshUI() {
-        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
+        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="renameChapter(${i})">✎</span><span onclick="moveChapter(${i},-1)">↑</span><span onclick="moveChapter(${i},1)">↓</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
+        renderDownloadTargets();
         renderList('replace-list', state.replaceRules || [], 'replace');
         renderList('insert-list', state.insertButtons || [], 'insert');
-        renderSnapshots(); updateButtons();
+        renderSnapshots(); updateButtons(); renderFavorites();
+        switchMenuTab(state.menuTab || 'favorites');
+        updateStats();
+    }
+    function renderDownloadTargets() {
+        const selectedIndexes = new Set(getSelectedChapterIndexes());
+        const container = document.getElementById('download-target-list');
+        if (!container) return;
+        container.innerHTML = state.chapters.map((ch, i) => {
+            const checked = selectedIndexes.size === 0 || selectedIndexes.has(i) ? 'checked' : '';
+            return `<label class="config-item" style="cursor:pointer;"><input id="download-target-${i}" type="checkbox" ${checked}><span style="flex:1;">${ch.title}</span></label>`;
+        }).join('');
+    }
+    function toggleSelectAllDownloadTargets() {
+        const checkboxes = Array.from(document.querySelectorAll('[id^="download-target-"]'));
+        if (checkboxes.length === 0) return;
+        const shouldCheck = checkboxes.some((box) => !box.checked);
+        checkboxes.forEach((box) => {
+            box.checked = shouldCheck;
+        });
     }
     function renderList(id, data, type) {
         document.getElementById(id).innerHTML = data.map((item, i) => `
@@ -415,9 +715,9 @@ async function githubSync(mode) {
     function updateStats() {
         const rawText = editor.value;
         const totalChars = rawText.length;
-        const readableText = rawText.replace(/[\s\u3000]/g, "");
+        const readableText = rawText.replace(/[\s　]/g, "");
         const readableChars = readableText.length;
-        const charsPerMinute = 600; // 日本語想定
+        const charsPerMinute = 600;
         const minutes = readableChars / charsPerMinute;
         let readingText;
         if (minutes < 1) {
@@ -426,28 +726,118 @@ async function githubSync(mode) {
         } else {
             const min = Math.floor(minutes);
             const sec = Math.round((minutes - min) * 60);
-            readingText = sec > 0
-                ? `約 ${min} 分 ${sec} 秒`
-                : `約 ${min} 分`;
+            readingText = sec > 0 ? `約 ${min} 分 ${sec} 秒` : `約 ${min} 分`;
         }
         document.getElementById('stats-display').innerText = `${totalChars} 文字（実質 ${readableChars}）｜ 読了 ${readingText}`;
+        const now = Date.now();
+        state.writingSessions = (state.writingSessions || []).filter((x) => now - x.t < 1000*60*60*24*14);
+        if (!state.writingSessions.length || now - state.writingSessions[state.writingSessions.length - 1].t > 45000) {
+            state.writingSessions.push({ t: now, c: totalChars });
+        } else {
+            state.writingSessions[state.writingSessions.length - 1].c = totalChars;
+        }
+        renderAnalytics();
     }
-    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open')); if(!isOpen) p.classList.add('open'); }
+    function renderAnalytics() {
+        const sessions = state.writingSessions || [];
+        const points = sessions.slice(-20).map((s) => `${new Date(s.t).toLocaleDateString().slice(5)}:${s.c}`).join(' / ');
+        document.getElementById('session-stats').innerHTML = `<div class="config-item" style="white-space:normal;">最近の文字数推移: ${points || 'データなし'}</div>`;
+        const words = (editor.value.match(/[一-龠ぁ-んァ-ヶA-Za-z0-9]{2,}/g) || []).reduce((acc, w) => (acc[w]=(acc[w]||0)+1, acc), {});
+        const top = Object.entries(words).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([w,c])=>`${w}(${c})`).join(' / ');
+        document.getElementById('top-words').innerHTML = `<div class="config-item" style="white-space:normal;">頻出語: ${top || 'データなし'}</div>`;
+    }
+    function toggleSearchPanel(forceOpen = false) {
+        const p = document.getElementById('search-panel');
+        p.style.display = (forceOpen || p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+        if (p.style.display === 'block') document.getElementById('search-query').focus();
+    }
+    function findNext() {
+        const q = document.getElementById('search-query').value;
+        if (!q) return;
+        const start = editor.selectionEnd;
+        const idx = editor.value.indexOf(q, start);
+        const hit = idx >= 0 ? idx : editor.value.indexOf(q, 0);
+        if (hit < 0) return showToast('見つかりませんでした', 'error');
+        editor.focus(); editor.setSelectionRange(hit, hit + q.length); updateHighlight();
+    }
+    function replaceCurrent() {
+        const q = document.getElementById('search-query').value;
+        const r = document.getElementById('replace-query').value;
+        if (!q) return;
+        const selected = editor.value.slice(editor.selectionStart, editor.selectionEnd);
+        if (selected === q) {
+            editor.setRangeText(r, editor.selectionStart, editor.selectionEnd, 'select');
+            save();
+        }
+        findNext();
+    }
+    function replaceAllMatches() {
+        const q = document.getElementById('search-query').value;
+        const r = document.getElementById('replace-query').value;
+        if (!q) return;
+        editor.value = editor.value.split(q).join(r);
+        save(); updateHighlight(); showToast('すべて置換しました', 'success');
+    }
+
+    async function downloadSelectedZip() {
+        save();
+        const selected = getSelectedChapterIndexes();
+        if (selected.length === 0) {
+            showToast('ダウンロード対象の話を選択してください。', 'error');
+            return;
+        }
+
+        if (selected.length === 1) {
+            const chapter = state.chapters[selected[0]];
+            const filename = `${sanitizeFileName(chapter.title)}.txt`;
+            triggerDownload(createUtf8TextBlob(chapter.body || ''), filename);
+            return;
+        }
+
+        if (typeof JSZip === 'undefined') {
+            showToast('ZIPライブラリの読み込みに失敗しました。通信状態を確認してください。', 'error');
+            return;
+        }
+
+        const zip = new JSZip();
+        selected.forEach((idx, order) => {
+            const chapter = state.chapters[idx];
+            const filename = `${String(order + 1).padStart(2, '0')}_${sanitizeFileName(chapter.title)}.txt`;
+            zip.file(filename, createUtf8BytesWithBom(chapter.body || ''));
+        });
+
+        const blob = await zip.generateAsync({ type: 'blob' });
+        triggerDownload(blob, 'kakudraft_selected.zip');
+    }
+    function downloadSelectedMergedTxt() {
+        save();
+        const selected = getSelectedChapterIndexes();
+        if (selected.length === 0) {
+            showToast('ダウンロード対象の話を選択してください。', 'error');
+            return;
+        }
+        const merged = selected.map((idx) => {
+            const chapter = state.chapters[idx];
+            return `===== ${chapter.title} =====\n${chapter.body || ''}`;
+        }).join('\n\n');
+        triggerDownload(createUtf8TextBlob(merged), 'kakudraft_merged.txt');
+    }
+    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); closePanels(); if(!isOpen) p.classList.add('open'); }
     function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
     function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }
     function exportFullData() { save(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], {type: 'application/json'})); a.download = `kaku_draft_full.json`; a.click(); }
     function importFullData(input) {
         const file = input.files[0]; if(!file) return;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const imported = JSON.parse(e.target.result);
                 if(confirm("JSONファイルから全データを復元しますか？現在のデータは上書きされます。")) {
                     state = imported;
-                    localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
+                    await persistNow();
                     location.reload();
                 }
-            } catch(err) { alert("JSONの解析に失敗しました。"); }
+            } catch(err) { showToast("JSONの解析に失敗しました。", "error"); }
         };
         reader.readAsText(file);
     }
@@ -463,84 +853,49 @@ async function githubSync(mode) {
     }
     function mergeChapter() { if (state.currentIdx === 0 || !confirm("前の話と統合しますか？")) return; save(); state.chapters[state.currentIdx - 1].body += "\n" + editor.value; state.chapters.splice(state.currentIdx, 1); state.currentIdx--; refreshUI(); loadChapter(state.currentIdx); }
     memoArea.oninput = save;
-
+    editor.addEventListener('pointerdown', closePanels);
+    editor.addEventListener('dragover', (e) => { e.preventDefault(); });
+    editor.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        const file = e.dataTransfer?.files?.[0];
+        if (file && file.type.startsWith('text/')) {
+            const text = await file.text();
+            editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
+        } else {
+            const text = e.dataTransfer?.getData('text/plain');
+            if (text) editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end');
+        }
+        save(); updateHighlight(); showToast('ドラッグ&ドロップで貼り付けました', 'success');
+    });
 
     document.addEventListener("keydown", async (e) => {
-
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const ctrl = isMac ? e.metaKey : e.ctrlKey;
-
-    if (!ctrl) return;
-
-    const key = e.key.toLowerCase();
-
-    switch (key) {
-
-        // ======================
-        // 保存（Ctrl+S）
-        // ======================
-        case "s":
-            e.preventDefault();
-
-            save();
-
-            if (state.ghToken && state.ghRepo) {
-                try {
+        const isMac = navigator.platform.toUpperCase().includes("MAC");
+        const ctrl = isMac ? e.metaKey : e.ctrlKey;
+        if (!ctrl) return;
+        const key = e.key.toLowerCase();
+        switch (key) {
+            case "s":
+                e.preventDefault();
+                save();
+                if (document.getElementById('gh-token').value && state.ghRepo) {
                     clearTimeout(syncTimer);
-                    syncTimer = setTimeout(() => {
-                        githubSync("up");
-                    }, 2000);
-                    console.log("Saved + GitHub backup scheduled");
-                } catch (err) {
-                    console.error("GitHub backup failed:", err);
+                    syncTimer = setTimeout(() => githubSync("up"), 1200);
                 }
-            } else {
-                console.log("Saved (local only)");
-            }
-            break;
-
-        // ======================
-        // メモ開閉（Ctrl+M）
-        // ======================
-        case "m":
-            e.preventDefault();
-            togglePanel("memo-panel");
-            break;
-
-
-        // ======================
-        // メニュー開閉（Ctrl+B）
-        // ======================
-        case "b":
-            e.preventDefault();
-            togglePanel("menu-panel");
-            break;
-
-
-        // ======================
-        // プレビュー（Ctrl+P）
-        // ======================
-        case "p":
-            e.preventDefault();
-            showPreview();
-            break;
-
-
-        // ======================
-        // フォーカス切替（Ctrl+E）
-        // ======================
-        case "e":
-            e.preventDefault();
-
-            if (document.activeElement === editor) {
-                memoArea.focus();
-            } else {
-                editor.focus();
-            }
-            break;
-
-    }
-});
+                break;
+            case "m": e.preventDefault(); togglePanel("memo-panel"); break;
+            case "b": e.preventDefault(); togglePanel("menu-panel"); break;
+            case "p": e.preventDefault(); showPreview(); break;
+            case "e": e.preventDefault(); document.activeElement === editor ? memoArea.focus() : editor.focus(); break;
+            case "f": e.preventDefault(); toggleSearchPanel(true); break;
+            case "g": e.preventDefault(); findNext(); break;
+            case "h": e.preventDefault(); location.href = 'help.html'; break;
+            case "j": e.preventDefault(); changeFontSize(-1); break;
+            case "k": e.preventDefault(); changeFontSize(1); break;
+            case "u": e.preventDefault(); takeBodySnapshot(); break;
+            case "arrowup": if (e.shiftKey) { e.preventDefault(); moveChapter(state.currentIdx, -1); } break;
+            case "arrowdown": if (e.shiftKey) { e.preventDefault(); moveChapter(state.currentIdx, 1); } break;
+        }
+    });
 </script>
 </body>
 </html>

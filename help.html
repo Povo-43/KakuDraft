@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>KakuDraft ヘルプ</title>
+  <style>
+    :root { --bg: #fcfaf2; --text: #333; --border: #000; --panel: #fff; }
+    body { margin: 0; font-family: "Sawarabi Mincho", serif; background: var(--bg); color: var(--text); }
+    main { max-width: 860px; margin: 0 auto; padding: 24px 16px 40px; line-height: 1.8; }
+    h1, h2 { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .box { border: 1px solid var(--border); background: var(--panel); padding: 12px; margin: 12px 0; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>KakuDraft ヘルプ</h1>
+
+  <h2>メニューの自動クローズ</h2>
+  <div class="box">
+    メモやメニューを開いている状態で、執筆欄（本文エディタ）をタップすると、開いているサイドパネルは自動で閉じます。
+  </div>
+
+  <h2>話を選んでダウンロード</h2>
+  <div class="box">
+    <ol>
+      <li>メニューの「ダウンロード」欄で、出力したい話にチェックを入れます。</li>
+      <li>「すべて選択 / 解除」で一括選択もできます。</li>
+      <li>必要に応じて次のどちらかを実行します。
+        <ul>
+          <li><strong>ZIPダウンロード</strong>: 選択した話を各話1ファイルのtxtとしてZIPで保存。</li>
+          <li><strong>結合TXTダウンロード</strong>: 選択した話を1つのtxtに結合して保存。</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <h2>結合TXTの区切り</h2>
+  <div class="box">
+    結合TXTでは、各話の先頭に <code>===== 話タイトル =====</code> の区切り行が入ります。
+  </div>
+
+  <h2>ヘルプへの移動</h2>
+  <div class="box">
+    メニュー内の「ヘルプ」ボタンからこのページに移動できます。
+  </div>
+
+  <p><a href="./index.html">← エディタに戻る</a></p>
+</main>
+</body>
+</html>

@@ -43,6 +43,10 @@
         .sys-btn { width: 100%; border: 1px solid var(--border); height: 35px; margin-bottom: 5px; font-size: 11px; background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
         h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; }
         #preview-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); display: none; overflow-y: auto; padding: 60px 20%; z-index: 200; box-sizing: border-box; line-height: 1.7; }
+        #toast { position: fixed; left: 50%; bottom: calc(58px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(12px); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 10px 14px; font-size: 12px; max-width: min(90vw, 520px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 300; }
+        #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #toast.success { border-color: #2e7d32; }
+        #toast.error { border-color: #c62828; }
     </style>
 </head>
 <body data-theme="light">
@@ -108,14 +112,32 @@
     </div>
 </main>
 <div id="preview-overlay" onclick="this.style.display='none'"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
 
 <script>
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
-    const enc = (s) => btoa(unescape(encodeURIComponent(s)));
-    const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
-    let syncTimer;    
+    const DB_NAME = 'kakudraft-db';
+    const DB_VERSION = 1;
+    const STATE_KEY = 'app-state';
+    const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
+    const REPO_DATA_PATH = 'kakudraft_data.json';
+    const toastEl = document.getElementById('toast');
+    let syncTimer;
+    let toastTimer;
+    let persistTimer;
+
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "" };
+
+    function showToast(message, type = 'info') {
+        if (!toastEl) return;
+        toastEl.textContent = message;
+        toastEl.className = `${type ? type + ' ' : ''}show`;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+            toastEl.className = '';
+        }, 2800);
+    }
 
     function closePanels() {
         document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open'));
@@ -125,6 +147,28 @@
         return (name || 'untitled').replace(/[\\/:*?"<>|]/g, '_');
     }
 
+    function createUtf8TextBlob(text) {
+        return new Blob(['﻿', text || ''], { type: 'text/plain;charset=utf-8' });
+    }
+
+    function createUtf8BytesWithBom(text) {
+        const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+        const body = new TextEncoder().encode(text || '');
+        const bytes = new Uint8Array(bom.length + body.length);
+        bytes.set(bom, 0);
+        bytes.set(body, bom.length);
+        return bytes;
+    }
+
+    function triggerDownload(blob, filename) {
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
     function getSelectedChapterIndexes() {
         return state.chapters.map((_, i) => i).filter((i) => {
             const checkbox = document.getElementById(`download-target-${i}`);
@@ -132,13 +176,144 @@
         });
     }
 
-    window.onload = () => {
-        const saved = localStorage.getItem('kaku_v_pro_sync');
+    function openDb() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+                if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' });
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function dbGet(storeName, key) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const request = tx.objectStore(storeName).get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function dbPut(storeName, value, key) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
+            const request = key === undefined ? store.put(value) : store.put(value, key);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function addLocalSnapshot(label, data) {
+        const snapshot = {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            date: new Date().toISOString(),
+            label,
+            data
+        };
+        await dbPut('snapshots', snapshot);
+    }
+
+    async function deriveTokenKey(deviceName) {
+        const secret = `kakudraft-lite-secret::${location.origin}::${deviceName || 'default-device'}`;
+        const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
+        return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    }
+
+    async function encryptPatToken(token, deviceName) {
+        if (!token || !window.crypto?.subtle) return '';
+        const key = await deriveTokenKey(deviceName);
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(token));
+        const payload = {
+            iv: Array.from(iv),
+            data: Array.from(new Uint8Array(encrypted))
+        };
+        return btoa(JSON.stringify(payload));
+    }
+
+    async function decryptPatToken(payloadB64, deviceName) {
+        if (!payloadB64 || !window.crypto?.subtle) return '';
+        try {
+            const payload = JSON.parse(atob(payloadB64));
+            const key = await deriveTokenKey(deviceName);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: new Uint8Array(payload.iv) },
+                key,
+                new Uint8Array(payload.data)
+            );
+            return new TextDecoder().decode(decrypted);
+        } catch {
+            return '';
+        }
+    }
+
+    function parseRepoTarget(rawRepo, fallbackOwner) {
+        const cleaned = (rawRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/^\/+|\/+$/g, '');
+        if (!cleaned) return null;
+        if (cleaned.includes('/')) {
+            const [owner, repo] = cleaned.split('/');
+            return owner && repo ? { owner, repo } : null;
+        }
+        return fallbackOwner ? { owner: fallbackOwner, repo: cleaned } : null;
+    }
+
+    async function requestJson(url, options = {}) {
+        const res = await fetch(url, options);
+        let body;
+        try { body = await res.json(); } catch { body = null; }
+        return { res, body };
+    }
+
+    async function persistNow() {
+        const tokenPlain = document.getElementById('gh-token').value || '';
+        state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
+        state.ghTokenLegacy = '';
+        await dbPut('kv', JSON.stringify(state), STATE_KEY);
+    }
+
+    function queuePersist() {
+        clearTimeout(persistTimer);
+        persistTimer = setTimeout(async () => {
+            try {
+                await persistNow();
+            } catch (e) {
+                console.error(e);
+                showToast('保存に失敗しました（再試行してください）', 'error');
+            }
+        }, 60);
+    }
+
+    async function loadPersistedState() {
+        const saved = await dbGet('kv', STATE_KEY);
         if (saved) {
             const parsed = JSON.parse(saved);
             state = Object.assign(state, parsed);
+            return;
         }
-        document.getElementById('gh-token').value = dec(state.ghToken);
+        const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacy) {
+            const parsed = JSON.parse(legacy);
+            state = Object.assign(state, parsed);
+            await dbPut('kv', JSON.stringify(state), STATE_KEY);
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            showToast('旧データを新しい保存形式へ移行しました', 'success');
+        }
+    }
+
+    window.onload = async () => {
+        await loadPersistedState();
+        let token = await decryptPatToken(state.ghTokenEnc, state.deviceName);
+        if (!token && state.ghToken) {
+            try { token = decodeURIComponent(escape(atob(state.ghToken))); } catch { token = ''; }
+        }
+        document.getElementById('gh-token').value = token;
         document.getElementById('gh-repo').value = state.ghRepo || "";
         document.getElementById('device-name').value = state.deviceName || "";
         document.body.setAttribute('data-theme', state.theme);
@@ -151,135 +326,121 @@
         const targetMemos = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
         const targetIdx = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
         if(targetMemos[targetIdx]) targetMemos[targetIdx].content = memoArea.value;
-        state.ghToken = enc(document.getElementById('gh-token').value);
-        state.ghRepo = document.getElementById('gh-repo').value;
-        state.deviceName = document.getElementById('device-name').value;
-        localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
+        state.ghRepo = document.getElementById('gh-repo').value.trim();
+        state.deviceName = document.getElementById('device-name').value.trim();
+        queuePersist();
         updateStats();
     }
 
-async function githubSync(mode) {
-    save();
-
-    const token = dec(state.ghToken);
-    const repoName = state.ghRepo?.trim();
-    const path = "kakudraft_data.json";
-
-    if (!token || !repoName) {
-        alert("GitHub設定を正しく入力してください");
-        return;
+    async function uploadRepoSnapshot(headers, owner, repo, currentState, reason) {
+        const snapshotPath = `kakudraft_snapshots/${new Date().toISOString().replace(/[:.]/g, '-')}_${sanitizeFileName(state.deviceName || 'device')}_${reason}.json`;
+        const bytes = new TextEncoder().encode(JSON.stringify(currentState));
+        let binary = "";
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const content = btoa(binary);
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${snapshotPath}`;
+        await fetch(apiUrl, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ message: `snapshot: ${reason}`, content })
+        });
     }
 
-    const headers = {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json"
-    };
+    async function githubSync(mode) {
+        save();
 
-    try {
-        // ==========================
-        // 1. login取得
-        // ==========================
-        const userRes = await fetch("https://api.github.com/user", { headers });
+        const token = document.getElementById('gh-token').value.trim();
+        const repoInput = state.ghRepo;
 
-        if (!userRes.ok) {
-            throw new Error("トークンが無効です");
+        if (!token || !repoInput) {
+            showToast('GitHub設定（PAT / リポジトリ）を入力してください', 'error');
+            return;
         }
 
-        const { login } = await userRes.json();
-        const repo = `${login}/${repoName}`;
-        const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
+        const headers = {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json"
+        };
 
-        let sha = null;
-        let remoteData = null;
+        try {
+            const userRes = await requestJson("https://api.github.com/user", { headers });
+            if (!userRes.res.ok && !repoInput.includes('/')) {
+                throw new Error('ユーザー情報の取得に失敗しました。owner/repo形式で入力してください。');
+            }
 
-        // ==========================
-        // 2. 既存ファイル確認
-        // ==========================
-        const getRes = await fetch(apiUrl, { headers });
+            const fallbackOwner = userRes.body?.login;
+            const parsedRepo = parseRepoTarget(repoInput, fallbackOwner);
+            if (!parsedRepo) throw new Error('リポジトリ形式が不正です（例: owner/repo または repo）。');
 
-        if (getRes.status === 200) {
-            const json = await getRes.json();
-            sha = json.sha;
+            const { owner, repo } = parsedRepo;
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_DATA_PATH}`;
 
-            const cleaned = json.content.replace(/\n/g, "");
-            const binary = atob(cleaned);
-            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-            const decoded = new TextDecoder().decode(bytes);
-            remoteData = JSON.parse(decoded);
+            let sha = null;
+            let remoteData = null;
 
-        } else if (getRes.status !== 404) {
-            const err = await getRes.text();
-            throw new Error(`取得失敗: ${getRes.status} ${err}`);
-        }
+            const getRes = await requestJson(apiUrl, { headers });
+            if (getRes.res.status === 200) {
+                sha = getRes.body.sha;
+                const cleaned = getRes.body.content.replace(/\n/g, "");
+                const binary = atob(cleaned);
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                remoteData = JSON.parse(new TextDecoder().decode(bytes));
+            } else if (getRes.res.status !== 404) {
+                throw new Error(getRes.body?.message || `取得失敗: ${getRes.res.status}`);
+            }
 
-        // ==========================
-        // 3. アップロード
-        // ==========================
-        if (mode === "up") {
-
+            if (mode === "up") {
                 const jsonStr = JSON.stringify(state);
                 const bytes = new TextEncoder().encode(jsonStr);
                 let binary = "";
-                const chunkSize = 0x8000; // 32KBずつ
+                const chunkSize = 0x8000;
                 for (let i = 0; i < bytes.length; i += chunkSize) {
                     const chunk = bytes.subarray(i, i + chunkSize);
                     binary += String.fromCharCode(...chunk);
                 }
                 const content = btoa(binary);
-                
-                const body = {
-                    message: `Sync from ${state.deviceName || "Unknown"}`,
-                    content
-                };
 
-            if (sha) body.sha = sha;
+                const body = { message: `Sync from ${state.deviceName || "Unknown"}`, content };
+                if (sha) body.sha = sha;
 
-            const putRes = await fetch(apiUrl, {
-                method: "PUT",
-                headers,
-                body: JSON.stringify(body)
-            });
+                const putRes = await requestJson(apiUrl, { method: "PUT", headers, body: JSON.stringify(body) });
+                if (!putRes.res.ok) throw new Error(putRes.body?.message || "アップロード失敗");
 
-            const result = await putRes.json();
+                showToast('アップロード成功', 'success');
+            } else {
+                if (!remoteData) {
+                    showToast('リモートにデータがありません。先にUPしてください。', 'error');
+                    return;
+                }
 
-            if (!putRes.ok) {
-                throw new Error(result.message || "アップロード失敗");
+                if (!confirm("リモートデータで復元しますか？")) return;
+
+                await addLocalSnapshot('before-download-local', structuredClone(state));
+                uploadRepoSnapshot(headers, owner, repo, structuredClone(state), 'before-download').catch(() => {});
+
+                const oldTokenEnc = state.ghTokenEnc;
+                const oldRepo = state.ghRepo;
+                const oldDevice = state.deviceName;
+
+                state = remoteData;
+                state.ghTokenEnc = oldTokenEnc;
+                state.ghRepo = oldRepo;
+                state.deviceName = oldDevice;
+
+                await addLocalSnapshot('after-download-remote', structuredClone(state));
+                await persistNow();
+                showToast('復元完了（ローカル/リポジトリへスナップショット保存）', 'success');
+                setTimeout(() => location.reload(), 500);
             }
-
-            alert("アップロード成功");
-
-        // ==========================
-        // 4. ダウンロード
-        // ==========================
-        } else {
-
-            if (!remoteData) {
-                alert("リモートにデータがありません。先にUPしてください。");
-                return;
-            }
-
-            if (!confirm("リモートデータで復元しますか？")) return;
-
-            const oldToken = state.ghToken;
-            const oldRepo = state.ghRepo;
-            const oldDevice = state.deviceName;
-
-            state = remoteData;
-
-            state.ghToken = oldToken;
-            state.ghRepo = oldRepo;
-            state.deviceName = oldDevice;
-
-            localStorage.setItem("kaku_v_pro_sync", JSON.stringify(state));
-            alert("復元完了");
-            location.reload();
+        } catch (err) {
+            console.error(err);
+            showToast(`GitHub同期エラー: ${err.message}`, 'error');
         }
-
-    } catch (err) {
-        console.error(err);
-        alert("GitHub同期エラー:\n" + err.message);
     }
-}
 
     function execReplace() {
         const val = editor.value; const cursor = editor.selectionStart;
@@ -381,7 +542,7 @@ async function githubSync(mode) {
             ? state.chapters[state.currentIdx].memos
             : state.globalMemos;
         if (target.length <= 1) {
-            alert("最低1つは必要です。");
+            showToast("最低1つは必要です。", "error");
             return;
         }
         if (!confirm("このメモを削除しますか？")) return;
@@ -477,42 +638,44 @@ async function githubSync(mode) {
         save();
         const selected = getSelectedChapterIndexes();
         if (selected.length === 0) {
-            alert('ダウンロード対象の話を選択してください。');
+            showToast('ダウンロード対象の話を選択してください。', 'error');
             return;
         }
+
+        if (selected.length === 1) {
+            const chapter = state.chapters[selected[0]];
+            const filename = `${sanitizeFileName(chapter.title)}.txt`;
+            triggerDownload(createUtf8TextBlob(chapter.body || ''), filename);
+            return;
+        }
+
         if (typeof JSZip === 'undefined') {
-            alert('ZIPライブラリの読み込みに失敗しました。通信状態を確認してください。');
+            showToast('ZIPライブラリの読み込みに失敗しました。通信状態を確認してください。', 'error');
             return;
         }
+
         const zip = new JSZip();
         selected.forEach((idx, order) => {
             const chapter = state.chapters[idx];
             const filename = `${String(order + 1).padStart(2, '0')}_${sanitizeFileName(chapter.title)}.txt`;
-            zip.file(filename, chapter.body || '');
+            zip.file(filename, createUtf8BytesWithBom(chapter.body || ''));
         });
+
         const blob = await zip.generateAsync({ type: 'blob' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'kakudraft_selected.zip';
-        a.click();
-        URL.revokeObjectURL(a.href);
+        triggerDownload(blob, 'kakudraft_selected.zip');
     }
     function downloadSelectedMergedTxt() {
         save();
         const selected = getSelectedChapterIndexes();
         if (selected.length === 0) {
-            alert('ダウンロード対象の話を選択してください。');
+            showToast('ダウンロード対象の話を選択してください。', 'error');
             return;
         }
         const merged = selected.map((idx) => {
             const chapter = state.chapters[idx];
             return `===== ${chapter.title} =====\n${chapter.body || ''}`;
         }).join('\n\n');
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([merged], { type: 'text/plain;charset=utf-8' }));
-        a.download = 'kakudraft_merged.txt';
-        a.click();
-        URL.revokeObjectURL(a.href);
+        triggerDownload(createUtf8TextBlob(merged), 'kakudraft_merged.txt');
     }
     function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); closePanels(); if(!isOpen) p.classList.add('open'); }
     function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
@@ -521,15 +684,15 @@ async function githubSync(mode) {
     function importFullData(input) {
         const file = input.files[0]; if(!file) return;
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
                 const imported = JSON.parse(e.target.result);
                 if(confirm("JSONファイルから全データを復元しますか？現在のデータは上書きされます。")) {
                     state = imported;
-                    localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
+                    await persistNow();
                     location.reload();
                 }
-            } catch(err) { alert("JSONの解析に失敗しました。"); }
+            } catch(err) { showToast("JSONの解析に失敗しました。", "error"); }
         };
         reader.readAsText(file);
     }
@@ -567,7 +730,7 @@ async function githubSync(mode) {
 
             save();
 
-            if (state.ghToken && state.ghRepo) {
+            if (document.getElementById('gh-token').value && state.ghRepo) {
                 try {
                     clearTimeout(syncTimer);
                     syncTimer = setTimeout(() => {

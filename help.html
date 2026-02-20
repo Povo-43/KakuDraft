@@ -108,6 +108,7 @@
   <div class="tabs" role="tablist" aria-label="ヘルプタブ">
     <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-init" id="tab-btn-init" onclick="switchTab('init')">初期設定タブ</button>
     <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-usage" id="tab-btn-usage" onclick="switchTab('usage')">機能の使い方タブ</button>
+    <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-shortcuts" id="tab-btn-shortcuts" onclick="switchTab('shortcuts')">ショートカットタブ</button>
     <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-tech" id="tab-btn-tech" onclick="switchTab('tech')">技術者向けタブ</button>
     <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-faq" id="tab-btn-faq" onclick="switchTab('faq')">よくある質問</button>
   </div>
@@ -175,13 +176,24 @@
     </ol>
     <p>結合TXTでは、各話の先頭に <code>===== 話タイトル =====</code> 区切りを入れます。</p>
 
-    <h3>ショートカット</h3>
+    <p class="note">ショートカットの一覧は「ショートカットタブ」を参照してください。</p>
+  </section>
+
+
+  <section class="panel" id="tab-shortcuts" role="tabpanel" aria-labelledby="tab-btn-shortcuts">
+    <h2>ショートカットタブ</h2>
     <ul>
       <li><code>Ctrl/⌘ + S</code>: 保存（GitHub設定時はUP予約）</li>
       <li><code>Ctrl/⌘ + M</code>: メモパネル開閉</li>
       <li><code>Ctrl/⌘ + B</code>: メニューパネル開閉</li>
       <li><code>Ctrl/⌘ + P</code>: プレビュー</li>
       <li><code>Ctrl/⌘ + E</code>: エディタ / メモのフォーカス切替</li>
+      <li><code>Ctrl/⌘ + F</code>: 検索&置換パネルを開く</li>
+      <li><code>Ctrl/⌘ + G</code>: 次を検索</li>
+      <li><code>Ctrl/⌘ + U</code>: 本文スナップショット保存</li>
+      <li><code>Ctrl/⌘ + J / K</code>: 文字サイズ - / +</li>
+      <li><code>Ctrl/⌘ + Shift + ↑ / ↓</code>: 話順を上/下へ移動</li>
+      <li><code>Ctrl/⌘ + H</code>: ヘルプを開く</li>
     </ul>
   </section>
 
@@ -190,7 +202,7 @@
 
     <h3>データ構造の概要</h3>
     <ul>
-      <li>主要状態はブラウザ内の <code>localStorage</code>（キー: <code>kaku_v_pro_sync</code>）へ保存。</li>
+      <li>主要状態はブラウザ内の <code>IndexedDB</code>（DB: <code>kakudraft-db</code>）へ保存。</li>
       <li>章データは <code>chapters[]</code> で保持し、各話に本文・メモ・スナップショットを持ちます。</li>
       <li>GitHub連携時は <code>kakudraft_data.json</code> を対象に同期します。</li>
     </ul>
@@ -238,7 +250,7 @@
 
 <script>
   function switchTab(tabName) {
-    const tabs = ['init', 'usage', 'tech', 'faq'];
+    const tabs = ['init', 'usage', 'shortcuts', 'tech', 'faq'];
     tabs.forEach((name) => {
       const panel = document.getElementById(`tab-${name}`);
       const btn = document.getElementById(`tab-btn-${name}`);

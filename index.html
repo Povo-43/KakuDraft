@@ -7,6 +7,7 @@
     <link rel="icon" type="image/png" href="./icon.png">
     <link rel="apple-touch-icon" href="./icon.png">
     <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
@@ -75,6 +76,12 @@
             <div id="chapter-list" class="chapter-list"></div>
             <div style="display:flex; gap:5px; margin-bottom:15px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
 
+            <h4>ダウンロード</h4>
+            <button class="sys-btn" onclick="toggleSelectAllDownloadTargets()">すべて選択 / 解除</button>
+            <div id="download-target-list" class="config-list"></div>
+            <button class="sys-btn" onclick="downloadSelectedZip()"><span class="material-icons" style="font-size:16px;">folder_zip</span> ZIPダウンロード</button>
+            <button class="sys-btn" onclick="downloadSelectedMergedTxt()"><span class="material-icons" style="font-size:16px;">description</span> 結合TXTダウンロード</button>
+
             <label style="font-size:11px; font-weight:bold;">履歴</label>
             <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
             <div id="snapshot-list" class="config-list"></div>
@@ -95,6 +102,7 @@
             </div>
             <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
             <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
+            <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:16px;">help</span> ヘルプ</button>
             <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
         </div>
     </div>
@@ -108,6 +116,21 @@
     const enc = (s) => btoa(unescape(encodeURIComponent(s)));
     const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
     let syncTimer;    
+
+    function closePanels() {
+        document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open'));
+    }
+
+    function sanitizeFileName(name) {
+        return (name || 'untitled').replace(/[\\/:*?"<>|]/g, '_');
+    }
+
+    function getSelectedChapterIndexes() {
+        return state.chapters.map((_, i) => i).filter((i) => {
+            const checkbox = document.getElementById(`download-target-${i}`);
+            return checkbox && checkbox.checked;
+        });
+    }
 
     window.onload = () => {
         const saved = localStorage.getItem('kaku_v_pro_sync');
@@ -383,9 +406,27 @@ async function githubSync(mode) {
     }
     function refreshUI() {
         document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
+        renderDownloadTargets();
         renderList('replace-list', state.replaceRules || [], 'replace');
         renderList('insert-list', state.insertButtons || [], 'insert');
         renderSnapshots(); updateButtons();
+    }
+    function renderDownloadTargets() {
+        const selectedIndexes = new Set(getSelectedChapterIndexes());
+        const container = document.getElementById('download-target-list');
+        if (!container) return;
+        container.innerHTML = state.chapters.map((ch, i) => {
+            const checked = selectedIndexes.size === 0 || selectedIndexes.has(i) ? 'checked' : '';
+            return `<label class="config-item" style="cursor:pointer;"><input id="download-target-${i}" type="checkbox" ${checked}><span style="flex:1;">${ch.title}</span></label>`;
+        }).join('');
+    }
+    function toggleSelectAllDownloadTargets() {
+        const checkboxes = Array.from(document.querySelectorAll('[id^="download-target-"]'));
+        if (checkboxes.length === 0) return;
+        const shouldCheck = checkboxes.some((box) => !box.checked);
+        checkboxes.forEach((box) => {
+            box.checked = shouldCheck;
+        });
     }
     function renderList(id, data, type) {
         document.getElementById(id).innerHTML = data.map((item, i) => `
@@ -432,7 +473,48 @@ async function githubSync(mode) {
         }
         document.getElementById('stats-display').innerText = `${totalChars} 文字（実質 ${readableChars}）｜ 読了 ${readingText}`;
     }
-    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open')); if(!isOpen) p.classList.add('open'); }
+    async function downloadSelectedZip() {
+        save();
+        const selected = getSelectedChapterIndexes();
+        if (selected.length === 0) {
+            alert('ダウンロード対象の話を選択してください。');
+            return;
+        }
+        if (typeof JSZip === 'undefined') {
+            alert('ZIPライブラリの読み込みに失敗しました。通信状態を確認してください。');
+            return;
+        }
+        const zip = new JSZip();
+        selected.forEach((idx, order) => {
+            const chapter = state.chapters[idx];
+            const filename = `${String(order + 1).padStart(2, '0')}_${sanitizeFileName(chapter.title)}.txt`;
+            zip.file(filename, chapter.body || '');
+        });
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'kakudraft_selected.zip';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+    function downloadSelectedMergedTxt() {
+        save();
+        const selected = getSelectedChapterIndexes();
+        if (selected.length === 0) {
+            alert('ダウンロード対象の話を選択してください。');
+            return;
+        }
+        const merged = selected.map((idx) => {
+            const chapter = state.chapters[idx];
+            return `===== ${chapter.title} =====\n${chapter.body || ''}`;
+        }).join('\n\n');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([merged], { type: 'text/plain;charset=utf-8' }));
+        a.download = 'kakudraft_merged.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); closePanels(); if(!isOpen) p.classList.add('open'); }
     function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
     function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }
     function exportFullData() { save(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], {type: 'application/json'})); a.download = `kaku_draft_full.json`; a.click(); }
@@ -463,6 +545,7 @@ async function githubSync(mode) {
     }
     function mergeChapter() { if (state.currentIdx === 0 || !confirm("前の話と統合しますか？")) return; save(); state.chapters[state.currentIdx - 1].body += "\n" + editor.value; state.chapters.splice(state.currentIdx, 1); state.currentIdx--; refreshUI(); loadChapter(state.currentIdx); }
     memoArea.oninput = save;
+    editor.addEventListener('pointerdown', closePanels);
 
 
     document.addEventListener("keydown", async (e) => {

@@ -3,8 +3,8 @@
     const DB_VERSION = 2;
     const STATE_KEY = 'app-state';
     const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
-    const REPO_DATA_PATH = 'kakudraft_data.json';
-    const REPO_AI_CHAT_PATH = 'kakudraft_ai_chat.json';
+    const CLOUD_PATHS = { settings: '設定/settings.json', keys: 'キー類/keys.json', stories: '話/stories.json', memos: 'メモ/memos.json', aiChat: '話/ai_chat.json', metadata: '設定/sync_metadata.json' };
+    const LEGACY_CLOUD_PATHS = { data: 'kakudraft_data.json', aiChat: 'kakudraft_ai_chat.json' };
     const AI_CHAT_KEY = 'ai-chat';
     const toastEl = document.getElementById('toast');
     let syncTimer;
@@ -15,7 +15,7 @@
             navigator.serviceWorker.register('./sw.js', { scope: './' });
         });
     }
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false, aiUsage:{}, syncMeta:{} };
     let aiChatState = [];
     let aiBusy = false;
     let aiThinkingDots = 1;
@@ -213,6 +213,8 @@
         if (next.aiKeyEnc && !next.aiKeysEnc[next.aiProvider || 'openrouter']) next.aiKeysEnc[next.aiProvider || 'openrouter'] = next.aiKeyEnc;
         next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
         next.aiFreeOnly = !!next.aiFreeOnly;
+        next.aiUsage = (next.aiUsage && typeof next.aiUsage === 'object') ? next.aiUsage : {};
+        next.syncMeta = (next.syncMeta && typeof next.syncMeta === 'object') ? next.syncMeta : {};
         return next;
     }
     function getAIKeyInputId(provider) {
@@ -249,6 +251,7 @@
             aiThinkingTimer = setInterval(() => {
                 aiThinkingDots = aiThinkingDots >= 3 ? 1 : aiThinkingDots + 1;
                 renderAIChatLog();
+        renderAIUsage();
             }, 420);
         } else {
             clearInterval(aiThinkingTimer);
@@ -261,6 +264,7 @@
             el.disabled = aiBusy || !navigator.onLine;
         });
         renderAIChatLog();
+        renderAIUsage();
     }
     async function stashAllProviderKeys() {
         state.aiKeysEnc = state.aiKeysEnc || {};
@@ -342,9 +346,26 @@
         updateOnlineFontUI();
         if (state.keepScreenOn) toggleWakeLock(true);
         renderAIChatLog();
+        renderAIUsage();
         setAIBusy(false);
         switchAITab(state.aiTab || 'chat');
         refreshUI(); loadChapter(state.currentIdx);
+        if (navigator.onLine && token && state.ghRepo) {
+            setTimeout(async () => {
+                try {
+                    const parsedRepo = parseRepoTarget(state.ghRepo, undefined);
+                    if (!parsedRepo) return;
+                    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+                    const metaUrl = `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/contents/${CLOUD_PATHS.metadata}`;
+                    const res = await requestJson(metaUrl, { headers });
+                    if (!res.res.ok || !res.body?.content) return;
+                    const remoteMeta = fromBase64ToJson(res.body.content);
+                    const remoteTs = Number(remoteMeta?.updatedAt || 0);
+                    const localTs = Number(state.syncMeta?.updatedAt || 0);
+                    if (remoteTs > localTs && confirm('GitHubにローカルより新しいバックアップがあります。取得しますか？')) await githubSync('down');
+                } catch {}
+            }, 400);
+        }
     };
     function save() {
         state.chapters[state.currentIdx].body = editor.value;
@@ -398,100 +419,187 @@
             ref.githubPath = path;
         }
     }
+
+    function toBase64FromText(text) {
+        const bytes = new TextEncoder().encode(text || '');
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return btoa(binary);
+    }
+    function fromBase64ToJson(content) {
+        const cleaned = (content || '').replace(/\n/g, '');
+        const binary = atob(cleaned);
+        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+    }
+    function buildCloudPieces() {
+        return {
+            settings: {
+                replaceRules: state.replaceRules, insertButtons: state.insertButtons, fontSize: state.fontSize, theme: state.theme,
+                deviceName: state.deviceName, menuTab: state.menuTab, favoriteActionKeys: state.favoriteActionKeys, fontFamily: state.fontFamily,
+                folders: state.folders, currentFolderId: state.currentFolderId, favoriteEditMode: state.favoriteEditMode, keepScreenOn: state.keepScreenOn,
+                aiProvider: state.aiProvider, aiModel: state.aiModel, aiTab: state.aiTab, aiFreeOnly: state.aiFreeOnly, aiUsage: state.aiUsage
+            },
+            keys: { ghTokenEnc: state.ghTokenEnc, ghRepo: state.ghRepo, deviceName: state.deviceName, aiKeyEnc: state.aiKeyEnc, aiKeysEnc: state.aiKeysEnc },
+            stories: { chapters: state.chapters, currentIdx: state.currentIdx, writingSessions: state.writingSessions },
+            memos: { globalMemos: state.globalMemos, currentGlobalMemoIdx: state.currentGlobalMemoIdx, memoScope: state.memoScope, folderMemos: state.folderMemos },
+            aiChat: { list: aiChatState || [] }
+        };
+    }
+    function applyCloudPieces(remote) {
+        const merged = structuredClone(state);
+        if (remote.settings) Object.assign(merged, remote.settings);
+        if (remote.keys) { merged.ghTokenEnc = remote.keys.ghTokenEnc || merged.ghTokenEnc; merged.ghRepo = remote.keys.ghRepo || merged.ghRepo; merged.deviceName = remote.keys.deviceName || merged.deviceName; merged.aiKeyEnc = remote.keys.aiKeyEnc || merged.aiKeyEnc; merged.aiKeysEnc = remote.keys.aiKeysEnc || merged.aiKeysEnc; }
+        if (remote.stories) { merged.chapters = remote.stories.chapters || merged.chapters; merged.currentIdx = Number.isInteger(remote.stories.currentIdx) ? remote.stories.currentIdx : merged.currentIdx; merged.writingSessions = remote.stories.writingSessions || merged.writingSessions; }
+        if (remote.memos) { merged.globalMemos = remote.memos.globalMemos || merged.globalMemos; merged.currentGlobalMemoIdx = Number.isInteger(remote.memos.currentGlobalMemoIdx) ? remote.memos.currentGlobalMemoIdx : merged.currentGlobalMemoIdx; merged.memoScope = remote.memos.memoScope || merged.memoScope; merged.folderMemos = remote.memos.folderMemos || merged.folderMemos; }
+        if (remote.aiChat?.list) aiChatState = Array.isArray(remote.aiChat.list) ? remote.aiChat.list.slice(-100) : [];
+        state = normalizeStateShape(merged);
+    }
+    function convertLegacyRemoteToPieces(legacyData, legacyAiChat) {
+        const normalized = normalizeStateShape(legacyData || {});
+        const pieces = {
+            settings: {
+                replaceRules: normalized.replaceRules,
+                insertButtons: normalized.insertButtons,
+                fontSize: normalized.fontSize,
+                theme: normalized.theme,
+                deviceName: normalized.deviceName,
+                menuTab: normalized.menuTab,
+                favoriteActionKeys: normalized.favoriteActionKeys,
+                fontFamily: normalized.fontFamily,
+                folders: normalized.folders,
+                currentFolderId: normalized.currentFolderId,
+                favoriteEditMode: normalized.favoriteEditMode,
+                keepScreenOn: normalized.keepScreenOn,
+                aiProvider: normalized.aiProvider,
+                aiModel: normalized.aiModel,
+                aiTab: normalized.aiTab,
+                aiFreeOnly: normalized.aiFreeOnly,
+                aiUsage: normalized.aiUsage || {}
+            },
+            keys: {
+                ghTokenEnc: normalized.ghTokenEnc || '',
+                ghRepo: normalized.ghRepo || '',
+                deviceName: normalized.deviceName || '',
+                aiKeyEnc: normalized.aiKeyEnc || '',
+                aiKeysEnc: normalized.aiKeysEnc || {}
+            },
+            stories: {
+                chapters: normalized.chapters,
+                currentIdx: normalized.currentIdx,
+                writingSessions: normalized.writingSessions || []
+            },
+            memos: {
+                globalMemos: normalized.globalMemos,
+                currentGlobalMemoIdx: normalized.currentGlobalMemoIdx,
+                memoScope: normalized.memoScope,
+                folderMemos: normalized.folderMemos || {}
+            },
+            aiChat: { list: Array.isArray(legacyAiChat) ? legacyAiChat.slice(-100) : [] },
+            metadata: { updatedAt: Date.now(), migratedFrom: 'legacy-cloud-format' }
+        };
+        return pieces;
+    }
+    async function putCloudPiece(headers, owner, repo, key, data, sha = '') {
+        const path = CLOUD_PATHS[key];
+        if (!path) return;
+        const body = { message: `sync ${key}`, content: toBase64FromText(JSON.stringify(data || {})) };
+        if (sha) body.sha = sha;
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+        const res = await requestJson(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+        if (!res.res.ok) throw new Error(res.body?.message || `${key}の保存に失敗`);
+    }
+    async function migrateLegacyCloudIfNeeded(headers, owner, repo, remote, remoteMeta) {
+        const hasCurrent = ['settings','keys','stories','memos','aiChat'].some((k) => !!remote[k]);
+        if (hasCurrent) return false;
+        let legacyData = null;
+        let legacyAiChat = null;
+        for (const [legacyKey, path] of Object.entries(LEGACY_CLOUD_PATHS)) {
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            const got = await requestJson(url, { headers });
+            if (got.res.status !== 200 || !got.body?.content) continue;
+            if (legacyKey === 'data') legacyData = fromBase64ToJson(got.body.content);
+            if (legacyKey === 'aiChat') legacyAiChat = fromBase64ToJson(got.body.content);
+        }
+        if (!legacyData && !legacyAiChat) return false;
+        const migrated = convertLegacyRemoteToPieces(legacyData || {}, legacyAiChat || []);
+        for (const key of ['settings','keys','stories','memos','aiChat']) {
+            remote[key] = migrated[key];
+            await putCloudPiece(headers, owner, repo, key, migrated[key]);
+        }
+        remote.metadata = migrated.metadata;
+        await putCloudPiece(headers, owner, repo, 'metadata', migrated.metadata, remoteMeta.metadata?.sha || '');
+        showToast('旧形式クラウドデータを新形式へ移行しました', 'success');
+        return true;
+    }
+    function updateAIUsage(provider, responseJson) {
+        const usage = responseJson?.usage || responseJson?.usageMetadata || null;
+        if (!usage) return;
+        state.aiUsage = state.aiUsage || {};
+        state.aiUsage[provider] = Object.assign({ updatedAt: Date.now() }, usage);
+        renderAIUsage();
+    }
+    function renderAIUsage() {
+        const box = document.getElementById('ai-usage');
+        if (!box) return;
+        const items = Object.entries(state.aiUsage || {});
+        box.innerHTML = items.map(([k,v]) => `<div class="config-item" style="display:block;"><div><strong>${escapeHtml(k)}</strong></div><div style="font-size:11px;opacity:.85;">${escapeHtml(JSON.stringify(v))}</div></div>`).join('') || '<div class="config-item">使用量情報なし</div>';
+    }
+
     async function githubSync(mode) {
         save();
         const token = document.getElementById('gh-token').value.trim();
         const repoInput = state.ghRepo;
-        if (!token || !repoInput) {
-            showToast('GitHub設定（PAT / リポジトリ）を入力してください', 'error');
-            return;
-        }
-        const headers = {
-            "Authorization": `Bearer ${token}`,
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json"
-        };
+        if (!token || !repoInput) return showToast('GitHub設定（PAT / リポジトリ）を入力してください', 'error');
+        const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
         try {
-            const userRes = await requestJson("https://api.github.com/user", { headers });
-            if (!userRes.res.ok && !repoInput.includes('/')) {
-                throw new Error('ユーザー情報の取得に失敗しました。owner/repo形式で入力してください。');
-            }
-            const fallbackOwner = userRes.body?.login;
-            const parsedRepo = parseRepoTarget(repoInput, fallbackOwner);
-            if (!parsedRepo) throw new Error('リポジトリ形式が不正です（例: owner/repo または repo）。');
+            const userRes = await requestJson('https://api.github.com/user', { headers });
+            const parsedRepo = parseRepoTarget(repoInput, userRes.body?.login);
+            if (!parsedRepo) throw new Error('リポジトリ形式が不正です');
             const { owner, repo } = parsedRepo;
-            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_DATA_PATH}`;
-            const aiChatApiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_AI_CHAT_PATH}`;
-            let sha = null;
-            let remoteData = null;
-            const getRes = await requestJson(apiUrl, { headers });
-            if (getRes.res.status === 200) {
-                sha = getRes.body.sha;
-                const cleaned = getRes.body.content.replace(/\n/g, "");
-                const binary = atob(cleaned);
-                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-                remoteData = JSON.parse(new TextDecoder().decode(bytes));
-            } else if (getRes.res.status !== 404) {
-                throw new Error(getRes.body?.message || `取得失敗: ${getRes.res.status}`);
-            }
-            let aiChatSha = null;
-            let remoteAIChat = null;
-            const getAiRes = await requestJson(aiChatApiUrl, { headers });
-            if (getAiRes.res.status === 200) {
-                aiChatSha = getAiRes.body.sha;
-                const cleaned = getAiRes.body.content.replace(/\n/g, "");
-                const binary = atob(cleaned);
-                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-                const parsedChat = JSON.parse(new TextDecoder().decode(bytes));
-                remoteAIChat = Array.isArray(parsedChat) ? parsedChat.slice(-100) : [];
-            } else if (getAiRes.res.status !== 404) {
-                throw new Error(getAiRes.body?.message || `AI履歴の取得失敗: ${getAiRes.res.status}`);
-            }
-            if (mode === "up") {
-                const jsonStr = JSON.stringify(getStateWithoutAIChat());
-                const bytes = new TextEncoder().encode(jsonStr);
-                let binary = "";
-                const chunkSize = 0x8000;
-                for (let i = 0; i < bytes.length; i += chunkSize) {
-                    const chunk = bytes.subarray(i, i + chunkSize);
-                    binary += String.fromCharCode(...chunk);
+            const pieces = buildCloudPieces();
+            const remote = {};
+            const remoteMeta = {};
+            for (const [key, path] of Object.entries(CLOUD_PATHS)) {
+                const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+                const got = await requestJson(url, { headers });
+                if (got.res.status === 200 && got.body?.content) {
+                    remoteMeta[key] = { sha: got.body.sha };
+                    remote[key] = fromBase64ToJson(got.body.content);
                 }
-                const content = btoa(binary);
-                const body = { message: `Sync from ${state.deviceName || "Unknown"}`, content };
-                if (sha) body.sha = sha;
-                const putRes = await requestJson(apiUrl, { method: "PUT", headers, body: JSON.stringify(body) });
-                if (!putRes.res.ok) throw new Error(putRes.body?.message || "アップロード失敗");
-                const chatStr = JSON.stringify(aiChatState || []);
-                const chatBytes = new TextEncoder().encode(chatStr);
-                let chatBinary = "";
-                const chatChunk = 0x8000;
-                for (let i = 0; i < chatBytes.length; i += chatChunk) chatBinary += String.fromCharCode(...chatBytes.subarray(i, i + chatChunk));
-                const chatBody = { message: `AI chat sync from ${state.deviceName || "Unknown"}`, content: btoa(chatBinary) };
-                if (aiChatSha) chatBody.sha = aiChatSha;
-                const putChatRes = await requestJson(aiChatApiUrl, { method: "PUT", headers, body: JSON.stringify(chatBody) });
-                if (!putChatRes.res.ok) throw new Error(putChatRes.body?.message || "AIチャット履歴アップロード失敗");
+            }
+            await migrateLegacyCloudIfNeeded(headers, owner, repo, remote, remoteMeta);
+            if (mode === 'up') {
+                let changed = 0;
+                for (const [key, path] of Object.entries(CLOUD_PATHS)) {
+                    if (key === 'metadata') continue;
+                    const contentJson = JSON.stringify(pieces[key]);
+                    if (JSON.stringify(remote[key] || null) === contentJson) continue;
+                    const putBody = { message: `sync ${key}`, content: toBase64FromText(contentJson) };
+                    if (remoteMeta[key]?.sha) putBody.sha = remoteMeta[key].sha;
+                    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+                    const putRes = await requestJson(url, { method:'PUT', headers, body: JSON.stringify(putBody) });
+                    if (!putRes.res.ok) throw new Error(putRes.body?.message || `${key}のアップロード失敗`);
+                    changed++;
+                }
+                const meta = { updatedAt: Date.now(), files: Object.keys(pieces) };
+                state.syncMeta = meta;
+                const metaBody = { message: 'sync metadata', content: toBase64FromText(JSON.stringify(meta)) };
+                if (remoteMeta.metadata?.sha) metaBody.sha = remoteMeta.metadata.sha;
+                const metaUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${CLOUD_PATHS.metadata}`;
+                await requestJson(metaUrl, { method:'PUT', headers, body: JSON.stringify(metaBody) });
                 await syncAttachmentsToGithub(headers, owner, repo);
-                showToast('アップロード成功（添付を別フォルダー管理）', 'success');
+                showToast(`アップロード成功（変更 ${changed} ファイル）`, 'success');
             } else {
-                if (!remoteData) {
-                    showToast('リモートにデータがありません。先にUPしてください。', 'error');
-                    return;
-                }
-                if (!confirm("リモートデータで復元しますか？")) return;
+                const hasRemote = ['settings','keys','stories','memos','aiChat'].some((k)=>remote[k]);
+                if (!hasRemote) return showToast('リモートにデータがありません。先にUPしてください。', 'error');
+                if (!confirm('リモートデータで復元しますか？')) return;
                 await addLocalSnapshot('before-download-local', structuredClone(state));
-                uploadRepoSnapshot(headers, owner, repo, structuredClone(state), 'before-download').catch(() => {});
-                const oldTokenEnc = state.ghTokenEnc;
-                const oldRepo = state.ghRepo;
-                const oldDevice = state.deviceName;
-                state = normalizeStateShape(remoteData);
-                aiChatState = Array.isArray(remoteAIChat) ? remoteAIChat.slice(-100) : [];
-                state.ghTokenEnc = oldTokenEnc;
-                state.ghRepo = oldRepo;
-                state.deviceName = oldDevice;
-                await addLocalSnapshot('after-download-remote', structuredClone(state));
+                applyCloudPieces(remote);
+                state.syncMeta = remote.metadata || state.syncMeta;
                 await persistNow();
-                showToast('復元完了（ローカル/リポジトリへスナップショット保存）', 'success');
-                setTimeout(() => location.reload(), 500);
+                showToast('復元完了（更新のあるファイルのみ取得）', 'success');
+                setTimeout(() => location.reload(), 400);
             }
         } catch (err) {
             console.error(err);
@@ -669,7 +777,7 @@
         document.querySelectorAll('#menu-tabs .tab').forEach((el) => {
             el.classList.toggle('active', el.dataset.tab === tab);
         });
-        ['favorites','chapters','settings','backup','analytics'].forEach((name) => {
+        ['favorites','chapters','settings','ai','backup','analytics'].forEach((name) => {
             document.getElementById(`menu-tab-${name}`).style.display = name === tab ? 'block' : 'none';
         });
         queuePersist();
@@ -828,7 +936,7 @@
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
         const files = memo?.attachments || [];
-        box.innerHTML = files.map((f, i) => `<div class="config-item"><span class="material-icons" style="font-size:16px;">${f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audiotrack' : f.type.startsWith('video/') ? 'movie' : 'description'}</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${f.name}</span><button onclick="previewMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">preview</span></button><button onclick="removeMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">delete</span></button></div>`).join('') || '<div class="config-item">添付なし</div>';
+        box.innerHTML = files.map((f, i) => `<div class="config-item"><span class="material-icons" style="font-size:16px;">${f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audiotrack' : f.type.startsWith('video/') ? 'movie' : 'description'}</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${f.name}</span><button onclick="previewMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">preview</span></button><button onclick="downloadMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">download</span></button><button onclick="removeMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">delete</span></button></div>`).join('') || '<div class="config-item">添付なし</div>';
     }
     async function attachMemoFile(file) {
         if (!file) return;
@@ -871,6 +979,15 @@
         if (!pane) return;
         pane.style.display = 'none';
         pane.innerHTML = '';
+    }
+    async function downloadMemoAttachment(i) {
+        const memo = getCurrentMemo();
+        const ref = memo?.attachments?.[i];
+        if (!ref) return;
+        const blobData = await getAttachmentData(ref);
+        if (!blobData?.data) return showToast('添付の取得に失敗しました', 'error');
+        const blob = blobData.data instanceof Blob ? blobData.data : new Blob([blobData.data], { type: ref.type || 'application/octet-stream' });
+        triggerDownload(blob, ref.name || 'attachment.bin');
     }
     async function removeMemoAttachment(i) {
         const ctx = getCurrentMemoContext();
@@ -1109,7 +1226,7 @@
     }
     function openAISettings() {
         togglePanel('menu-panel');
-        switchMenuTab('settings');
+        switchMenuTab('ai');
     }
     async function onAIProviderChange() {
         const nextProvider = document.getElementById('ai-provider')?.value || 'openrouter';
@@ -1214,6 +1331,7 @@
             if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
             const text = j.candidates?.[0]?.content?.parts?.map((p)=>p.text || '').join('') || '';
             if (!text.trim()) throw new Error('AI応答が空でした。モデル設定や利用制限を確認してください。');
+            updateAIUsage('google', j);
             return text;
         }
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
@@ -1230,6 +1348,7 @@
         const content = j.choices?.[0]?.message?.content;
         const text = typeof content === 'string' ? content : Array.isArray(content) ? content.map((p)=>p.text || '').join('') : '';
         if (!text.trim()) throw new Error('AI応答が空でした。モデル設定や利用制限を確認してください。');
+        updateAIUsage(provider, j);
         return text;
     }
     async function sendAIChat() {
@@ -1253,6 +1372,7 @@ ${prompt}` }
             aiChatState.push({ q: prompt, a: ans, at: Date.now() });
             aiChatState = aiChatState.slice(-100);
             renderAIChatLog();
+        renderAIUsage();
             showToast('AIチャット応答を取得しました', 'success');
             save();
         } catch (e) {
@@ -1315,40 +1435,35 @@ ${scopeText.slice(0, 12000)}
         const src = String(text || '').replace(/\r\n/g, '\n');
         const lines = src.split('\n');
         const out = [];
-        let inUl = false; let inOl = false; let inCode = false;
-        const flush = () => { if (inUl) { out.push('</ul>'); inUl = false; } if (inOl) { out.push('</ol>'); inOl = false; } };
+        let inUl = false; let inOl = false; let inCode = false; let tableRows = [];
         const inline = (v) => escapeHtml(v)
             .replace(/`([^`]+)`/g, '<code>$1</code>')
             .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*]+)\*/g, '<em>$1</em>')
             .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-        for (const line of lines) {
-            if (line.trim().startsWith('```')) {
-                flush();
-                out.push(inCode ? '</code></pre>' : '<pre><code>');
-                inCode = !inCode;
-                continue;
+        const flush = () => {
+            if (inUl) { out.push('</ul>'); inUl = false; }
+            if (inOl) { out.push('</ol>'); inOl = false; }
+            if (tableRows.length) {
+                const head = tableRows[0] || [];
+                const body = tableRows.slice(1);
+                out.push('<table><thead><tr>' + head.map((c) => `<th>${c}</th>`).join('') + '</tr></thead><tbody>' + body.map((r) => '<tr>' + r.map((c) => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody></table>');
+                tableRows = [];
             }
-            if (inCode) {
-                out.push(escapeHtml(line) + '\n');
-                continue;
+        };
+        for (const line of lines) {
+            if (line.trim().startsWith('```')) { flush(); out.push(inCode ? '</code></pre>' : '<pre><code>'); inCode = !inCode; continue; }
+            if (inCode) { out.push(escapeHtml(line) + '\n'); continue; }
+            if (line.includes('|')) {
+                const cols = line.split('|').map((x) => x.trim()).filter((_, i, arr) => !(i === 0 && arr[0] === '') && !(i === arr.length - 1 && arr[arr.length - 1] === '')).map(inline);
+                if (cols.length >= 2 && !/^[-:|\s]+$/.test(line.trim())) { tableRows.push(cols); continue; }
+                if (/^[-:|\s]+$/.test(line.trim()) && tableRows.length) continue;
             }
             let m;
-            if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
-                if (!inUl) { flush(); out.push('<ul>'); inUl = true; }
-                out.push(`<li>${inline(m[1])}</li>`);
-                continue;
-            }
-            if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) {
-                if (!inOl) { flush(); out.push('<ol>'); inOl = true; }
-                out.push(`<li>${inline(m[1])}</li>`);
-                continue;
-            }
+            if ((m = line.match(/^\s*[-*]\s+(.*)$/))) { if (!inUl) { flush(); out.push('<ul>'); inUl = true; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+            if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) { if (!inOl) { flush(); out.push('<ol>'); inOl = true; } out.push(`<li>${inline(m[1])}</li>`); continue; }
             flush();
-            if ((m = line.match(/^\s*#+\s+(.*)$/))) {
-                out.push(`<h3>${inline(m[1])}</h3>`);
-                continue;
-            }
+            if ((m = line.match(/^\s*#+\s+(.*)$/))) { out.push(`<h3>${inline(m[1])}</h3>`); continue; }
             if (line.trim()) out.push(`<p>${inline(line)}</p>`);
         }
         flush();
@@ -1358,6 +1473,7 @@ ${scopeText.slice(0, 12000)}
     function clearAIChatHistory() {
         aiChatState = [];
         renderAIChatLog();
+        renderAIUsage();
         queuePersist();
         showToast('AIチャット履歴を削除しました', 'success');
     }
@@ -1366,7 +1482,7 @@ ${scopeText.slice(0, 12000)}
         if (!log) return;
         const rows = (aiChatState || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`);
         if (aiBusy) rows.push(`<div class="config-item" style="display:block;"><div><strong>AI:</strong></div><div class="md-content">AIが思考中${'.'.repeat(aiThinkingDots)}</div></div>`);
-        log.innerHTML = rows.join('') || '<div class="config-item">会話履歴はありません</div>'; 
+        log.innerHTML = rows.join('') || '<div class="config-item">会話履歴はありません</div>';
         log.scrollTop = log.scrollHeight;
     }
     window.addEventListener('online', onAIProviderChange);

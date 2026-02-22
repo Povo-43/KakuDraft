@@ -127,16 +127,15 @@
             <div id="ai-panel-chat" class="ai-sub-panel">
                 <div id="ai-chat-log" class="config-list ai-chat-log"></div>
                 <div class="ai-composer">
-                    <div class="config-input-group" style="margin-bottom:6px;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-                    <div class="ai-chat-input-row"><textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:80px;"></textarea><button class="sys-btn icon-only-btn" style="margin:0;" title="送信" onclick="sendAIChat()"><span class="material-icons">send</span></button></div>
+                    <div class="ai-chat-input-row"><textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:80px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="送信" onclick="sendAIChat()"><span class="material-icons">send</span></button></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
                 </div>
             </div>
             <div id="ai-panel-proofread" class="ai-sub-panel" style="display:none;">
                 <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
                 <div class="ai-composer">
-                    <div class="config-input-group" style="margin-bottom:6px;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-                    <textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea>
-                    <div style="display:flex; gap:6px; margin:8px 0 0;"><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲実行</button></div>
+                    <div class="ai-chat-input-row"><textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="校閲実行" onclick="runAIProofread()"><span class="material-icons">spellcheck</span></button></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
                 </div>
             </div>
         </div>

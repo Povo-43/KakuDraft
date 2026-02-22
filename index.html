@@ -7,540 +7,131 @@
     <link rel="icon" type="image/png" href="./icon.png">
     <link rel="apple-touch-icon" href="./icon.png">
     <link rel="manifest" href="manifest.json">
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js', { scope: './' });
-            });
-        }
-    </script>
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <style>
-        :root { --bg: #fcfaf2; --text: #333; --border: #000; --panel: #fff; --input-bg: #fff; --hl: rgba(0,0,0,0.05); --editor-size: 18px; }
-        [data-theme="dark"] { --bg: #121212; --text: #e0e0e0; --border: #444; --panel: #1e1e1e; --input-bg: #2a2a2a; --hl: rgba(255,255,255,0.08); }
-        body { margin: 0; font-family: "Sawarabi Mincho", serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
-        main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relative; }
-        #editor-container { flex: 1; display: flex; flex-direction: column; position: relative; width: 100%; }
-        #editor { flex: 1; padding: 40px 10%; font-size: var(--editor-size); line-height: 1.7; border: none; outline: none; background: transparent; color: var(--text); resize: none; overflow-y: auto; width: 100%; box-sizing: border-box; z-index: 2; }
-        #line-highlight { position: absolute; left: 0; width: 100%; height: 1.7em; background: var(--hl); pointer-events: none; z-index: 1; transition: top 0.1s; display: none; }
-        .side-panel { width: 0; background: var(--panel); border-left: 1px solid var(--border); transition: 0.2s; display: flex; flex-direction: column; overflow: hidden; z-index: 50; }
-        .side-panel.open { width: 350px; }
-        .panel-content { padding: 20px; flex: 1; overflow-y: auto; box-sizing: border-box; }
-        .config-list { border: 1px solid var(--border); margin-bottom: 10px; font-size: 12px; background: var(--input-bg); min-height: 40px; }
-        .config-item { display: flex; border-bottom: 1px solid var(--border); align-items: center; padding: 8px 10px; gap: 8px; color: var(--text); }
-        .config-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
-        .config-input-group input { flex: 1; min-width: 0; padding: 6px; border: 1px solid var(--border); font-size: 11px; background: var(--input-bg); color: var(--text); }
-        .tab-bar { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
-        .tab { padding: 10px 15px; font-size: 11px; cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; }
-        .tab.active { background: var(--panel); font-weight: bold; border-bottom: 2px solid var(--text); }
-        .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
-        .chapter-item { padding: 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
-        .chapter-item.active { background: var(--bg); font-weight: bold; }
-        footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
-        .btn-group { display: flex; overflow-x: auto; }
-        footer button { height: 45px; min-width: 45px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-        .sys-btn { width: 100%; border: 1px solid var(--border); height: 35px; margin-bottom: 5px; font-size: 11px; background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
-        h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; }
-        #preview-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); display: none; overflow-y: auto; padding: 60px 20%; z-index: 200; box-sizing: border-box; line-height: 1.7; }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700&family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=Sawarabi+Mincho&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./app.css">
+
 </head>
 <body data-theme="light">
 <main>
     <div id="editor-container"><div id="line-highlight"></div><textarea id="editor" placeholder="執筆を開始..."></textarea></div>
-    
+
     <div id="memo-panel" class="side-panel">
         <div style="font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px;">
             <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話</span>
-            <span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
+            <span id="scope-folder" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('folder')">● フォルダー</span><span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div style="display: flex; border-bottom: 1px solid var(--border);"><input type="text" id="new-memo-name" placeholder="＋メモ名" style="flex:1; border:none; padding:10px; font-size:11px; background:var(--input-bg); color:var(--text);"><button onclick="addMemoTab()" style="border:none; background:var(--panel); border-left:1px solid var(--border); width:50px; cursor:pointer; color:var(--text);"><span class="material-icons">add</span></button></div>
-        <textarea id="memo-area" style="flex:1; width:100%; border:none; outline:none; padding:15px; background:transparent; color:var(--text); resize:none; font-size:13px; line-height:1.7;"></textarea>
+        <textarea id="memo-area" style="flex:1; width:100%; border:none; outline:none; padding:15px; background:transparent; color:var(--text); resize:none; font-size:13px; line-height:1.7;"></textarea><div style="border-top:1px solid var(--border); padding:8px;"><button class="sys-btn" style="margin:0 0 6px 0;" onclick="document.getElementById('memo-attach-input').click()"><span class="material-icons" style="font-size:16px;">attach_file</span> 添付追加</button><input id="memo-attach-input" type="file" accept="image/*,audio/*,.txt,text/plain" style="display:none" onchange="attachMemoFile(this.files[0])"><div id="memo-attachments" class="config-list"></div></div>
     </div>
 
     <div id="menu-panel" class="side-panel">
         <div class="panel-content">
-            <div id="stats-display" style="font-size: 13px; padding: 10px; border: 1px solid var(--border); margin-bottom: 20px; background: var(--input-bg); text-align: center;">0 文字</div>
-            
-            <h4>GitHub 同期</h4>
-            <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
-            <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名"></div>
-            <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
-            <div style="display:flex; gap:5px; margin-bottom:10px;">
-                <button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button>
-                <button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button>
+            <div id="stats-display" style="font-size: 13px; padding: 10px; border: 1px solid var(--border); margin-bottom: 12px; background: var(--input-bg); text-align: center;">0 文字</div>
+            <div class="tab-bar" id="menu-tabs" style="margin-bottom:10px; border:1px solid var(--border);">
+                <div class="tab active" data-tab="favorites" onclick="switchMenuTab('favorites')">お気に入り</div>
+                <div class="tab" data-tab="chapters" onclick="switchMenuTab('chapters')">話管理</div>
+                <div class="tab" data-tab="settings" onclick="switchMenuTab('settings')">設定</div>
+                <div class="tab" data-tab="backup" onclick="switchMenuTab('backup')">バックアップ</div>
+                <div class="tab" data-tab="analytics" onclick="switchMenuTab('analytics')">統計</div>
             </div>
 
-            <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
-            <div id="chapter-list" class="chapter-list"></div>
-            <div style="display:flex; gap:5px; margin-bottom:15px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
-
-            <label style="font-size:11px; font-weight:bold;">履歴</label>
-            <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
-            <div id="snapshot-list" class="config-list"></div>
-
-            <label style="font-size:11px; font-weight:bold;">自動置換</label>
-            <div id="replace-list" class="config-list"></div>
-            <div class="config-input-group"><input type="text" id="rep-from" placeholder="前"><input type="text" id="rep-to" placeholder="後"><button onclick="addListItem('replace')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
-
-            <label style="font-size:11px; font-weight:bold;">挿入ボタン</label>
-            <div id="insert-list" class="config-list"></div>
-            <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
-
-            <h4>システム</h4>
-            <div style="display:flex; gap:5px;">
-                <button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button>
-                <button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button>
-                <button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button>
+            <div class="menu-tab-panel" id="menu-tab-favorites">
+                <h4>お気に入り機能 <button onclick="toggleFavoriteEditMode()" style="font-size:11px;">編集</button></h4>
+                <div id="favorite-actions" class="config-list"></div>
+                <div id="favorite-edit-block" style="display:none;">
+                <label style="font-size:11px; font-weight:bold;">お気に入り順序</label>
+                <div id="favorite-order-list" class="config-list"></div>
+                <label style="font-size:11px; font-weight:bold;">お気に入り登録</label>
+                <div id="favorite-selector" class="config-list"></div>
+                </div>
             </div>
-            <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
-            <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
-            <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
+
+            <div class="menu-tab-panel" id="menu-tab-chapters" style="display:none;">
+                <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
+                <div class="config-input-group"><input id="new-folder-name" placeholder="新規フォルダー"><button onclick="addFolder()" style="border:1px solid var(--border);">+</button></div>
+                <div class="config-input-group"><select id="folder-filter" onchange="changeFolderFilter(this.value)" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></select><button onclick="renameCurrentFolder()" style="border:1px solid var(--border);">フォルダー名変更</button></div>
+                <div id="chapter-list" class="chapter-list"></div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
+                <h4>ダウンロード</h4>
+                <button class="sys-btn" onclick="toggleSelectAllDownloadTargets()">すべて選択 / 解除</button>
+                <div id="download-target-list" class="config-list"></div>
+                <button class="sys-btn" onclick="downloadSelectedZip()"><span class="material-icons" style="font-size:16px;">folder_zip</span> ZIPダウンロード</button>
+                <button class="sys-btn" onclick="downloadSelectedMergedTxt()"><span class="material-icons" style="font-size:16px;">description</span> 結合TXTダウンロード</button>
+                <label style="font-size:11px; font-weight:bold;">履歴</label>
+                <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
+                <div id="snapshot-list" class="config-list"></div>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-settings" style="display:none;">
+                <h4>置換・挿入</h4>
+                <label style="font-size:11px; font-weight:bold;">自動置換</label>
+                <div id="replace-list" class="config-list"></div>
+                <div class="config-input-group"><input type="text" id="rep-from" placeholder="前"><input type="text" id="rep-to" placeholder="後"><button onclick="addListItem('replace')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+                <label style="font-size:11px; font-weight:bold;">挿入ボタン</label>
+                <div id="insert-list" class="config-list"></div>
+                <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
+                <h4>表示設定</h4>
+                <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div><label class="config-item" style="cursor:pointer;"><input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock(this.checked)"><span>画面消灯を防止</span></label>
+                <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-backup" style="display:none;">
+                <h4>GitHub 同期</h4>
+                <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
+                <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名 or owner/repo"></div>
+                <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button><button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button></div>
+                <h4>エクスポート</h4>
+                <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
+                <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
+                <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:16px;">help</span> ヘルプ</button>
+                <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-analytics" style="display:none;">
+                <h4>執筆統計</h4>
+                <canvas id="writing-graph" width="300" height="120" style="width:100%; border:1px solid var(--border); background:var(--input-bg); margin-bottom:8px;"></canvas>
+                <div id="session-stats" class="config-list"></div>
+                <div id="top-words" class="config-list"></div>
+                <div id="other-stats" class="config-list"></div><div id="search-summary" class="config-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-panel" class="side-panel">
+        <div class="panel-content">
+            <h4>AIアシスタント</h4>
+            <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
+            <div class="config-input-group">
+                <select id="ai-provider" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);" onchange="onAIProviderChange()">
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="groq">Groq</option>
+                    <option value="google">Google</option>
+                </select>
+            </div>
+            <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key"></div>
+            <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
+            <div class="config-input-group"><select id="ai-model" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></select></div>
+            <div class="config-input-group"><select id="ai-scope" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
+            <div style="display:flex; gap:6px; margin-bottom:8px;"><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲</button><button class="sys-btn" style="margin:0;" onclick="sendAIChat()"><span class="material-icons">chat</span> チャット</button></div>
+            <textarea id="ai-prompt" placeholder="AIへの指示" style="width:100%; min-height:70px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></textarea>
+            <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
+            <div id="ai-chat-log" class="config-list"></div>
         </div>
     </div>
 </main>
 <div id="preview-overlay" onclick="this.style.display='none'"></div>
-<footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="search-panel" style="position:fixed; top:12px; right:12px; width:min(92vw,380px); border:1px solid var(--border); background:var(--panel); padding:10px; z-index:280; display:none;">
+  <div style="display:flex; gap:6px; margin-bottom:6px;"><input id="search-query" placeholder="検索" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"><input id="replace-query" placeholder="置換" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></div>
+  <div style="display:flex; gap:6px;"><button class="sys-btn" onclick="findNext()" style="margin:0;">次を検索</button><button class="sys-btn" onclick="replaceCurrent()" style="margin:0;">置換</button><button class="sys-btn" onclick="replaceAllMatches()" style="margin:0;">すべて置換</button></div>
+</div>
+<footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="toggleSearchPanel()"><span class="material-icons">find_replace</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('ai-panel')"><span class="material-icons">smart_toy</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
 
-<script>
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: ""}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: ""}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghToken: "", ghRepo: "", deviceName: "" };
-    const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
-    const enc = (s) => btoa(unescape(encodeURIComponent(s)));
-    const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch(e) { return ""; } };
-    let syncTimer;    
-
-    window.onload = () => {
-        const saved = localStorage.getItem('kaku_v_pro_sync');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            state = Object.assign(state, parsed);
-        }
-        document.getElementById('gh-token').value = dec(state.ghToken);
-        document.getElementById('gh-repo').value = state.ghRepo || "";
-        document.getElementById('device-name').value = state.deviceName || "";
-        document.body.setAttribute('data-theme', state.theme);
-        document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px');
-        refreshUI(); loadChapter(state.currentIdx);
-    };
-
-    function save() {
-        state.chapters[state.currentIdx].body = editor.value;
-        const targetMemos = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
-        const targetIdx = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
-        if(targetMemos[targetIdx]) targetMemos[targetIdx].content = memoArea.value;
-        state.ghToken = enc(document.getElementById('gh-token').value);
-        state.ghRepo = document.getElementById('gh-repo').value;
-        state.deviceName = document.getElementById('device-name').value;
-        localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
-        updateStats();
-    }
-
-async function githubSync(mode) {
-    save();
-
-    const token = dec(state.ghToken);
-    const repoName = state.ghRepo?.trim();
-    const path = "kakudraft_data.json";
-
-    if (!token || !repoName) {
-        alert("GitHub設定を正しく入力してください");
-        return;
-    }
-
-    const headers = {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/vnd.github+json"
-    };
-
-    try {
-        // ==========================
-        // 1. login取得
-        // ==========================
-        const userRes = await fetch("https://api.github.com/user", { headers });
-
-        if (!userRes.ok) {
-            throw new Error("トークンが無効です");
-        }
-
-        const { login } = await userRes.json();
-        const repo = `${login}/${repoName}`;
-        const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
-
-        let sha = null;
-        let remoteData = null;
-
-        // ==========================
-        // 2. 既存ファイル確認
-        // ==========================
-        const getRes = await fetch(apiUrl, { headers });
-
-        if (getRes.status === 200) {
-            const json = await getRes.json();
-            sha = json.sha;
-
-            const cleaned = json.content.replace(/\n/g, "");
-            const binary = atob(cleaned);
-            const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-            const decoded = new TextDecoder().decode(bytes);
-            remoteData = JSON.parse(decoded);
-
-        } else if (getRes.status !== 404) {
-            const err = await getRes.text();
-            throw new Error(`取得失敗: ${getRes.status} ${err}`);
-        }
-
-        // ==========================
-        // 3. アップロード
-        // ==========================
-        if (mode === "up") {
-
-                const jsonStr = JSON.stringify(state);
-                const bytes = new TextEncoder().encode(jsonStr);
-                let binary = "";
-                const chunkSize = 0x8000; // 32KBずつ
-                for (let i = 0; i < bytes.length; i += chunkSize) {
-                    const chunk = bytes.subarray(i, i + chunkSize);
-                    binary += String.fromCharCode(...chunk);
-                }
-                const content = btoa(binary);
-                
-                const body = {
-                    message: `Sync from ${state.deviceName || "Unknown"}`,
-                    content
-                };
-
-            if (sha) body.sha = sha;
-
-            const putRes = await fetch(apiUrl, {
-                method: "PUT",
-                headers,
-                body: JSON.stringify(body)
-            });
-
-            const result = await putRes.json();
-
-            if (!putRes.ok) {
-                throw new Error(result.message || "アップロード失敗");
-            }
-
-            alert("アップロード成功");
-
-        // ==========================
-        // 4. ダウンロード
-        // ==========================
-        } else {
-
-            if (!remoteData) {
-                alert("リモートにデータがありません。先にUPしてください。");
-                return;
-            }
-
-            if (!confirm("リモートデータで復元しますか？")) return;
-
-            const oldToken = state.ghToken;
-            const oldRepo = state.ghRepo;
-            const oldDevice = state.deviceName;
-
-            state = remoteData;
-
-            state.ghToken = oldToken;
-            state.ghRepo = oldRepo;
-            state.deviceName = oldDevice;
-
-            localStorage.setItem("kaku_v_pro_sync", JSON.stringify(state));
-            alert("復元完了");
-            location.reload();
-        }
-
-    } catch (err) {
-        console.error(err);
-        alert("GitHub同期エラー:\n" + err.message);
-    }
-}
-
-    function execReplace() {
-        const val = editor.value; const cursor = editor.selectionStart;
-        state.replaceRules.forEach(rule => {
-            if (val.slice(cursor - rule.from.length, cursor) === rule.from) {
-                editor.value = val.slice(0, cursor - rule.from.length) + rule.to + val.slice(cursor);
-                editor.selectionStart = editor.selectionEnd = cursor - rule.from.length + rule.to.length;
-            }
-        });
-        save();
-    }
-    editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
-    function updateHighlight() {
-
-        const div = document.createElement("div");
-        const style = getComputedStyle(editor);
-
-        // 必要なスタイルだけコピー（全部コピーはズレやすい）
-        const properties = [
-            "boxSizing",
-            "width",
-            "height",
-            "fontSize",
-            "fontFamily",
-            "fontWeight",
-            "lineHeight",
-            "paddingTop",
-            "paddingRight",
-            "paddingBottom",
-            "paddingLeft",
-            "borderTopWidth",
-            "borderRightWidth",
-            "borderBottomWidth",
-            "borderLeftWidth",
-            "whiteSpace",
-            "wordWrap"
-        ];
-
-        properties.forEach(prop => {
-            div.style[prop] = style[prop];
-        });
-
-        div.style.position = "absolute";
-        div.style.visibility = "hidden";
-        div.style.whiteSpace = "pre-wrap";
-        div.style.wordWrap = "break-word";
-        div.style.overflow = "hidden";
-
-        div.textContent = editor.value.substring(0, editor.selectionStart);
-
-        const span = document.createElement("span");
-        span.textContent = editor.value.substring(editor.selectionStart) || ".";
-        div.appendChild(span);
-
-        document.body.appendChild(div);
-
-        const lineHeight = parseFloat(style.lineHeight);
-
-        const top =
-            span.offsetTop
-            - editor.scrollTop;
-
-        document.body.removeChild(div);
-
-        hl.style.display = "block";
-        hl.style.height = lineHeight + "px";
-        hl.style.top = top + "px";
-    }
-
-    ['scroll','click','keyup','focus'].forEach(ev => editor.addEventListener(ev, updateHighlight));
-    function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
-    function switchChapter(i) { save(); state.currentIdx = i; refreshUI(); loadChapter(i); }
-    function takeBodySnapshot(customName) { 
-        const name = customName || new Date().toLocaleTimeString();
-        if(!state.chapters[state.currentIdx].snapshots) state.chapters[state.currentIdx].snapshots = [];
-        state.chapters[state.currentIdx].snapshots.unshift({ date: name, body: editor.value }); 
-        renderSnapshots(); save(); 
-    }
-    function renderSnapshots() {
-        const snaps = state.chapters[state.currentIdx].snapshots || [];
-        document.getElementById('snapshot-list').innerHTML = snaps.map((s, i) => `<div class="config-item"><span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.date}</span><button onclick="restoreBody(${i})">復元</button></div>`).join('');
-    }
-    function restoreBody(i) { if(confirm("本文を復元しますか？")) { editor.value = state.chapters[state.currentIdx].snapshots[i].body; save(); updateHighlight(); } }
-    function switchMemoScope(scope) { save(); state.memoScope = scope; renderMemos(); }
-    function renderMemos() {
-        const m = state.memoScope === 'local' ? (state.chapters[state.currentIdx].memos || []) : (state.globalMemos || []);
-        const a = state.memoScope === 'local' ? state.chapters[state.currentIdx].currentMemoIdx : state.currentGlobalMemoIdx;
-        document.getElementById('memo-tabs').innerHTML = m.map((x, i) => `
-            <div class="tab ${i === a ? 'active' : ''}" style="display:flex; align-items:center; gap:5px;">
-                <span style="flex:1; cursor:pointer;" onclick="switchMemo(${i})">${x.name}</span>
-                <span style="font-size:12px; cursor:pointer;" onclick="deleteMemo(${i})">×</span>
-            </div>
-        `).join('');
-
-        memoArea.value = m[a] ? m[a].content : "";
-    }
-    function deleteMemo(i) {
-        const target = state.memoScope === 'local'
-            ? state.chapters[state.currentIdx].memos
-            : state.globalMemos;
-        if (target.length <= 1) {
-            alert("最低1つは必要です。");
-            return;
-        }
-        if (!confirm("このメモを削除しますか？")) return;
-        target.splice(i, 1);
-        if (state.memoScope === 'local') {
-            if (state.chapters[state.currentIdx].currentMemoIdx >= target.length) {
-                state.chapters[state.currentIdx].currentMemoIdx = target.length - 1;
-            }
-        } else {
-            if (state.currentGlobalMemoIdx >= target.length) {
-                state.currentGlobalMemoIdx = target.length - 1;
-            }
-        }
-        renderMemos();
-        save();
-    }
-    function switchMemo(i) { save(); if(state.memoScope === 'local') state.chapters[state.currentIdx].currentMemoIdx = i; else state.currentGlobalMemoIdx = i; renderMemos(); }
-    function addMemoTab() {
-        const name = document.getElementById('new-memo-name').value.trim() || "無題";
-        const target = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.globalMemos;
-        target.push({name, content: ""}); document.getElementById('new-memo-name').value = ""; renderMemos();
-    }
-    function refreshUI() {
-        document.getElementById('chapter-list').innerHTML = state.chapters.map((ch, i) => `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><span style="flex:1" onclick="switchChapter(${i})">${ch.title}</span><span onclick="deleteChapter(${i})">×</span></div>`).join('');
-        renderList('replace-list', state.replaceRules || [], 'replace');
-        renderList('insert-list', state.insertButtons || [], 'insert');
-        renderSnapshots(); updateButtons();
-    }
-    function renderList(id, data, type) {
-        document.getElementById(id).innerHTML = data.map((item, i) => `
-            <div class="config-item"><span style="flex:1">${item.from || item.label} → ${item.to || item.value}</span>
-            <span class="material-icons" style="font-size:16px; cursor:pointer;" onclick="removeItem('${type}', ${i})">delete_outline</span></div>
-        `).join('');
-    }
-    function addListItem(type) {
-        if (type === 'replace') {
-            const f = document.getElementById('rep-from').value, t = document.getElementById('rep-to').value;
-            if(f && t) { state.replaceRules.push({from:f, to:t}); document.getElementById('rep-from').value = ""; document.getElementById('rep-to').value = ""; }
-        } else {
-            const l = document.getElementById('ins-label').value, v = document.getElementById('ins-value').value;
-            if(l && v) { state.insertButtons.push({label:l, value:v}); document.getElementById('ins-label').value = ""; document.getElementById('ins-value').value = ""; }
-        }
-        refreshUI(); save();
-    }
-    function removeItem(type, i) { if (type === 'replace') state.replaceRules.splice(i, 1); else state.insertButtons.splice(i, 1); refreshUI(); save(); }
-    function updateButtons() {
-        const container = document.getElementById('quick-buttons'); container.innerHTML = '';
-        (state.insertButtons || []).forEach(b => {
-            const btn = document.createElement('button'); btn.innerText = b.label;
-            btn.onclick = () => { editor.setRangeText(b.value, editor.selectionStart, editor.selectionEnd, 'end'); editor.focus(); save(); updateHighlight(); };
-            container.appendChild(btn);
-        });
-    }
-    function updateStats() {
-        const rawText = editor.value;
-        const totalChars = rawText.length;
-        const readableText = rawText.replace(/[\s\u3000]/g, "");
-        const readableChars = readableText.length;
-        const charsPerMinute = 600; // 日本語想定
-        const minutes = readableChars / charsPerMinute;
-        let readingText;
-        if (minutes < 1) {
-            const seconds = Math.max(1, Math.round(minutes * 60));
-            readingText = `約 ${seconds} 秒`;
-        } else {
-            const min = Math.floor(minutes);
-            const sec = Math.round((minutes - min) * 60);
-            readingText = sec > 0
-                ? `約 ${min} 分 ${sec} 秒`
-                : `約 ${min} 分`;
-        }
-        document.getElementById('stats-display').innerText = `${totalChars} 文字（実質 ${readableChars}）｜ 読了 ${readingText}`;
-    }
-    function togglePanel(id) { const p = document.getElementById(id); const isOpen = p.classList.contains('open'); document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open')); if(!isOpen) p.classList.add('open'); }
-    function toggleTheme() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.body.setAttribute('data-theme', state.theme); save(); }
-    function changeFontSize(d) { state.fontSize += d; document.documentElement.style.setProperty('--editor-size', state.fontSize + 'px'); updateHighlight(); save(); }
-    function exportFullData() { save(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state)], {type: 'application/json'})); a.download = `kaku_draft_full.json`; a.click(); }
-    function importFullData(input) {
-        const file = input.files[0]; if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const imported = JSON.parse(e.target.result);
-                if(confirm("JSONファイルから全データを復元しますか？現在のデータは上書きされます。")) {
-                    state = imported;
-                    localStorage.setItem('kaku_v_pro_sync', JSON.stringify(state));
-                    location.reload();
-                }
-            } catch(err) { alert("JSONの解析に失敗しました。"); }
-        };
-        reader.readAsText(file);
-    }
-    function showPreview() { document.getElementById('preview-overlay').innerHTML = editor.value.replace(/\n/g, '<br>'); document.getElementById('preview-overlay').style.display = 'block'; }
-    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:""}], currentMemoIdx: 0}); state.currentIdx = state.chapters.length - 1; refreshUI(); loadChapter(state.currentIdx); }
-    function deleteChapter(i) { if(state.chapters.length <= 1 || !confirm("削除？")) return; state.chapters.splice(i, 1); state.currentIdx = 0; refreshUI(); loadChapter(0); }
-    function splitChapter() {
-        const pos = editor.selectionStart; const bodyBefore = editor.value.slice(0, pos); const bodyAfter = editor.value.slice(pos);
-        const newTitle = prompt("続話のタイトル:", state.chapters[state.currentIdx].title + " (続)"); if (!newTitle) return;
-        save(); state.chapters[state.currentIdx].body = bodyBefore;
-        state.chapters.splice(state.currentIdx + 1, 0, { title: newTitle, body: bodyAfter, memos: [{name:"メモ", content:""}], currentMemoIdx: 0, snapshots: [] });
-        state.currentIdx++; refreshUI(); loadChapter(state.currentIdx);
-    }
-    function mergeChapter() { if (state.currentIdx === 0 || !confirm("前の話と統合しますか？")) return; save(); state.chapters[state.currentIdx - 1].body += "\n" + editor.value; state.chapters.splice(state.currentIdx, 1); state.currentIdx--; refreshUI(); loadChapter(state.currentIdx); }
-    memoArea.oninput = save;
-
-
-    document.addEventListener("keydown", async (e) => {
-
-    const isMac = navigator.platform.toUpperCase().includes("MAC");
-    const ctrl = isMac ? e.metaKey : e.ctrlKey;
-
-    if (!ctrl) return;
-
-    const key = e.key.toLowerCase();
-
-    switch (key) {
-
-        // ======================
-        // 保存（Ctrl+S）
-        // ======================
-        case "s":
-            e.preventDefault();
-
-            save();
-
-            if (state.ghToken && state.ghRepo) {
-                try {
-                    clearTimeout(syncTimer);
-                    syncTimer = setTimeout(() => {
-                        githubSync("up");
-                    }, 2000);
-                    console.log("Saved + GitHub backup scheduled");
-                } catch (err) {
-                    console.error("GitHub backup failed:", err);
-                }
-            } else {
-                console.log("Saved (local only)");
-            }
-            break;
-
-        // ======================
-        // メモ開閉（Ctrl+M）
-        // ======================
-        case "m":
-            e.preventDefault();
-            togglePanel("memo-panel");
-            break;
-
-
-        // ======================
-        // メニュー開閉（Ctrl+B）
-        // ======================
-        case "b":
-            e.preventDefault();
-            togglePanel("menu-panel");
-            break;
-
-
-        // ======================
-        // プレビュー（Ctrl+P）
-        // ======================
-        case "p":
-            e.preventDefault();
-            showPreview();
-            break;
-
-
-        // ======================
-        // フォーカス切替（Ctrl+E）
-        // ======================
-        case "e":
-            e.preventDefault();
-
-            if (document.activeElement === editor) {
-                memoArea.focus();
-            } else {
-                editor.focus();
-            }
-            break;
-
-    }
-});
-</script>
+<script src="./app.js" defer></script>
 </body>
 </html>

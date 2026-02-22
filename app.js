@@ -1127,6 +1127,28 @@
         if (scope === 'all') return state.chapters.map((ch) => `### ${ch.title}\n${ch.body || ''}`).join('\n\n');
         return state.chapters[state.currentIdx]?.body || '';
     }
+
+    function getValidAppOrigin() {
+        const o = location.origin;
+        if (!o || o === 'null' || o === 'file://') return 'https://kakudraft.local';
+        return o;
+    }
+
+    function buildProviderHeaders(provider, key, withJson = true) {
+        const headers = {};
+        if (withJson) headers['Content-Type'] = 'application/json';
+        if (provider === 'google') {
+            headers['x-goog-api-key'] = key;
+            return headers;
+        }
+        headers.Authorization = `Bearer ${key}`;
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = getValidAppOrigin();
+            headers['X-Title'] = 'KakuDraft';
+        }
+        return headers;
+    }
+
     async function fetchAIModels() {
         if (!navigator.onLine) return showToast('オフライン中は利用できません', 'error');
         const provider = document.getElementById('ai-provider').value;
@@ -1136,20 +1158,18 @@
             let models = [];
             if (provider === 'openrouter') {
                 const r = await fetch('https://openrouter.ai/api/v1/models', {
-                    headers: {
-                        Authorization: `Bearer ${key}`,
-                        'HTTP-Referer': location.origin || 'https://kakudraft.local',
-                        'X-Title': 'KakuDraft'
-                    }
+                    headers: buildProviderHeaders('openrouter', key, false)
                 });
                 const j = await r.json();
                 models = (j.data || []).map((m) => m.id);
             } else if (provider === 'groq') {
-                const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${key}` } });
+                const r = await fetch('https://api.groq.com/openai/v1/models', { headers: buildProviderHeaders('groq', key, false) });
                 const j = await r.json();
                 models = (j.data || []).map((m) => m.id);
             } else {
-                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+                    headers: buildProviderHeaders('google', key, false)
+                });
                 const j = await r.json();
                 models = (j.models || []).map((m) => m.name.replace('models/', ''));
             }
@@ -1174,8 +1194,8 @@
         if (provider === 'google') {
             const prompt = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
             const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+                method: 'POST', headers: buildProviderHeaders('google', key), body: JSON.stringify(body)
             });
             j = await r.json();
             if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
@@ -1187,11 +1207,7 @@
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
         const body = { model, messages, temperature: 0.4 };
         if (jsonMode) body.response_format = { type: 'json_object' };
-        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
-        if (provider === 'openrouter') {
-            headers['HTTP-Referer'] = location.origin || 'https://kakudraft.local';
-            headers['X-Title'] = 'KakuDraft';
-        }
+        const headers = buildProviderHeaders(provider, key);
         r = await fetch(base, {
             method: 'POST',
             headers,

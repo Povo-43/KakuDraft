@@ -1080,6 +1080,9 @@
         if (proofTab) proofTab.classList.toggle('active', mode === 'proofread');
         if (chatPanel) chatPanel.style.display = mode === 'chat' ? 'flex' : 'none';
         if (proofPanel) proofPanel.style.display = mode === 'proofread' ? 'flex' : 'none';
+        const scope = document.getElementById('ai-scope')?.value || 'chapter';
+        const proofScope = document.getElementById('ai-scope-proofread');
+        if (proofScope) proofScope.value = scope;
         queuePersist();
     }
 
@@ -1101,7 +1104,7 @@
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
-        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope'].forEach((id) => {
+        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline;
         });
@@ -1124,7 +1127,13 @@
         try {
             let models = [];
             if (provider === 'openrouter') {
-                const r = await fetch('https://openrouter.ai/api/v1/models', { headers: { Authorization: `Bearer ${key}` } });
+                const r = await fetch('https://openrouter.ai/api/v1/models', {
+                    headers: {
+                        Authorization: `Bearer ${key}`,
+                        'HTTP-Referer': location.origin || 'https://kakudraft.local',
+                        'X-Title': 'KakuDraft'
+                    }
+                });
                 const j = await r.json();
                 models = (j.data || []).map((m) => m.id);
             } else if (provider === 'groq') {
@@ -1170,9 +1179,14 @@
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
         const body = { model, messages, temperature: 0.4 };
         if (jsonMode) body.response_format = { type: 'json_object' };
+        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = location.origin || 'https://kakudraft.local';
+            headers['X-Title'] = 'KakuDraft';
+        }
         r = await fetch(base, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+            headers,
             body: JSON.stringify(body)
         });
         j = await r.json();
@@ -1381,6 +1395,16 @@
     bindEnterShortcut(document.getElementById('ai-proofread-prompt'), runAIProofread);
     bindEnterShortcut(document.getElementById('search-query'), findNext);
     bindEnterShortcut(document.getElementById('replace-query'), findNext);
+    document.getElementById('ai-scope')?.addEventListener('change', (e) => {
+        const proofScope = document.getElementById('ai-scope-proofread');
+        if (proofScope) proofScope.value = e.target.value;
+        save();
+    });
+    document.getElementById('ai-scope-proofread')?.addEventListener('change', (e) => {
+        const scope = document.getElementById('ai-scope');
+        if (scope) scope.value = e.target.value;
+        save();
+    });
     editor.addEventListener('pointerdown', closePanels);
     editor.addEventListener('dragover', (e) => { e.preventDefault(); });
     editor.addEventListener('drop', async (e) => {

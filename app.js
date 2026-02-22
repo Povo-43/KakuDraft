@@ -4,6 +4,7 @@
     const STATE_KEY = 'app-state';
     const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
     const CLOUD_PATHS = { settings: '設定/settings.json', keys: 'キー類/keys.json', stories: '話/stories.json', memos: 'メモ/memos.json', aiChat: '話/ai_chat.json', metadata: '設定/sync_metadata.json' };
+    const LEGACY_CLOUD_PATHS = { data: 'kakudraft_data.json', aiChat: 'kakudraft_ai_chat.json' };
     const AI_CHAT_KEY = 'ai-chat';
     const toastEl = document.getElementById('toast');
     let syncTimer;
@@ -454,6 +455,83 @@
         if (remote.aiChat?.list) aiChatState = Array.isArray(remote.aiChat.list) ? remote.aiChat.list.slice(-100) : [];
         state = normalizeStateShape(merged);
     }
+    function convertLegacyRemoteToPieces(legacyData, legacyAiChat) {
+        const normalized = normalizeStateShape(legacyData || {});
+        const pieces = {
+            settings: {
+                replaceRules: normalized.replaceRules,
+                insertButtons: normalized.insertButtons,
+                fontSize: normalized.fontSize,
+                theme: normalized.theme,
+                deviceName: normalized.deviceName,
+                menuTab: normalized.menuTab,
+                favoriteActionKeys: normalized.favoriteActionKeys,
+                fontFamily: normalized.fontFamily,
+                folders: normalized.folders,
+                currentFolderId: normalized.currentFolderId,
+                favoriteEditMode: normalized.favoriteEditMode,
+                keepScreenOn: normalized.keepScreenOn,
+                aiProvider: normalized.aiProvider,
+                aiModel: normalized.aiModel,
+                aiTab: normalized.aiTab,
+                aiFreeOnly: normalized.aiFreeOnly,
+                aiUsage: normalized.aiUsage || {}
+            },
+            keys: {
+                ghTokenEnc: normalized.ghTokenEnc || '',
+                ghRepo: normalized.ghRepo || '',
+                deviceName: normalized.deviceName || '',
+                aiKeyEnc: normalized.aiKeyEnc || '',
+                aiKeysEnc: normalized.aiKeysEnc || {}
+            },
+            stories: {
+                chapters: normalized.chapters,
+                currentIdx: normalized.currentIdx,
+                writingSessions: normalized.writingSessions || []
+            },
+            memos: {
+                globalMemos: normalized.globalMemos,
+                currentGlobalMemoIdx: normalized.currentGlobalMemoIdx,
+                memoScope: normalized.memoScope,
+                folderMemos: normalized.folderMemos || {}
+            },
+            aiChat: { list: Array.isArray(legacyAiChat) ? legacyAiChat.slice(-100) : [] },
+            metadata: { updatedAt: Date.now(), migratedFrom: 'legacy-cloud-format' }
+        };
+        return pieces;
+    }
+    async function putCloudPiece(headers, owner, repo, key, data, sha = '') {
+        const path = CLOUD_PATHS[key];
+        if (!path) return;
+        const body = { message: `sync ${key}`, content: toBase64FromText(JSON.stringify(data || {})) };
+        if (sha) body.sha = sha;
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+        const res = await requestJson(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+        if (!res.res.ok) throw new Error(res.body?.message || `${key}の保存に失敗`);
+    }
+    async function migrateLegacyCloudIfNeeded(headers, owner, repo, remote, remoteMeta) {
+        const hasCurrent = ['settings','keys','stories','memos','aiChat'].some((k) => !!remote[k]);
+        if (hasCurrent) return false;
+        let legacyData = null;
+        let legacyAiChat = null;
+        for (const [legacyKey, path] of Object.entries(LEGACY_CLOUD_PATHS)) {
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            const got = await requestJson(url, { headers });
+            if (got.res.status !== 200 || !got.body?.content) continue;
+            if (legacyKey === 'data') legacyData = fromBase64ToJson(got.body.content);
+            if (legacyKey === 'aiChat') legacyAiChat = fromBase64ToJson(got.body.content);
+        }
+        if (!legacyData && !legacyAiChat) return false;
+        const migrated = convertLegacyRemoteToPieces(legacyData || {}, legacyAiChat || []);
+        for (const key of ['settings','keys','stories','memos','aiChat']) {
+            remote[key] = migrated[key];
+            await putCloudPiece(headers, owner, repo, key, migrated[key]);
+        }
+        remote.metadata = migrated.metadata;
+        await putCloudPiece(headers, owner, repo, 'metadata', migrated.metadata, remoteMeta.metadata?.sha || '');
+        showToast('旧形式クラウドデータを新形式へ移行しました', 'success');
+        return true;
+    }
     function updateAIUsage(provider, responseJson) {
         const usage = responseJson?.usage || responseJson?.usageMetadata || null;
         if (!usage) return;
@@ -490,6 +568,7 @@
                     remote[key] = fromBase64ToJson(got.body.content);
                 }
             }
+            await migrateLegacyCloudIfNeeded(headers, owner, repo, remote, remoteMeta);
             if (mode === 'up') {
                 let changed = 0;
                 for (const [key, path] of Object.entries(CLOUD_PATHS)) {

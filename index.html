@@ -84,9 +84,12 @@
                         <option value="google">Google</option>
                     </select>
                 </div>
-                <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key（プロバイダごとに保存）"></div>
+                <div class="config-input-group"><input id="ai-api-key-openrouter" type="password" placeholder="OpenRouter API Key"></div>
+                <div class="config-input-group"><input id="ai-api-key-groq" type="password" placeholder="Groq API Key"></div>
+                <div class="config-input-group"><input id="ai-api-key-google" type="password" placeholder="Google API Key"></div>
                 <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
                 <div class="config-input-group"><select id="ai-model" class="field"></select></div>
+                <label id="ai-free-only-row" class="config-item" style="cursor:pointer;"><input id="ai-free-only" type="checkbox"><span>無料モデルのみ（OpenRouterのみ）</span></label>
 <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
                 <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
             </div>
@@ -116,8 +119,9 @@
 
     <div id="ai-panel" class="side-panel">
         <div class="panel-content ai-panel-content">
-            <h4>AIアシスタント <button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></h4>
+            <h4>AIアシスタント <div style="display:flex; gap:6px;"><button id="ai-chat-clear-btn" class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="clearAIChatHistory()"><span class="material-icons" style="font-size:16px;">delete_sweep</span> 履歴クリア</button><button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></div></h4>
             <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
+            <div id="ai-busy-note" class="config-item" style="display:none;">AI応答中です。</div>
             <div class="tab-bar ai-inner-tabs">
                 <div id="ai-tab-chat" class="tab active" onclick="switchAITab('chat')">チャット</div>
                 <div id="ai-tab-proofread" class="tab" onclick="switchAITab('proofread')">校閲</div>
@@ -125,16 +129,15 @@
             <div id="ai-panel-chat" class="ai-sub-panel">
                 <div id="ai-chat-log" class="config-list ai-chat-log"></div>
                 <div class="ai-composer">
-                    <div class="config-input-group" style="margin-bottom:6px;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-                    <div class="ai-chat-input-row"><textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:80px;"></textarea><button class="sys-btn icon-only-btn" style="margin:0;" title="送信" onclick="sendAIChat()"><span class="material-icons">send</span></button></div>
+                    <div class="ai-chat-input-row"><textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:80px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="送信" id="ai-send-chat" onclick="sendAIChat()"><span class="material-icons">send</span></button></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
                 </div>
             </div>
             <div id="ai-panel-proofread" class="ai-sub-panel" style="display:none;">
                 <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
                 <div class="ai-composer">
-                    <div class="config-input-group" style="margin-bottom:6px;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-                    <textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea>
-                    <div style="display:flex; gap:6px; margin:8px 0 0;"><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲実行</button></div>
+                    <div class="ai-chat-input-row"><textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="校閲実行" id="ai-send-proofread" onclick="runAIProofread()"><span class="material-icons">spellcheck</span></button></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
                 </div>
             </div>
         </div>

@@ -89,6 +89,7 @@
                 <div class="config-input-group"><input id="ai-api-key-google" type="password" placeholder="Google API Key"></div>
                 <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
                 <div class="config-input-group"><select id="ai-model" class="field"></select></div>
+                <label id="ai-free-only-row" class="config-item" style="cursor:pointer;"><input id="ai-free-only" type="checkbox"><span>無料モデルのみ（OpenRouterのみ）</span></label>
 <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
                 <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
             </div>
@@ -120,7 +121,7 @@
         <div class="panel-content ai-panel-content">
             <h4>AIアシスタント <div style="display:flex; gap:6px;"><button id="ai-chat-clear-btn" class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="clearAIChatHistory()"><span class="material-icons" style="font-size:16px;">delete_sweep</span> 履歴クリア</button><button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></div></h4>
             <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
-            <div id="ai-busy-note" class="config-item" style="display:none;">AI応答中です…完了まで入力をロックしています。</div>
+            <div id="ai-busy-note" class="config-item" style="display:none;">AI応答中です。</div>
             <div class="tab-bar ai-inner-tabs">
                 <div id="ai-tab-chat" class="tab active" onclick="switchAITab('chat')">チャット</div>
                 <div id="ai-tab-proofread" class="tab" onclick="switchAITab('proofread')">校閲</div>

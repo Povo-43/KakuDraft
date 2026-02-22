@@ -15,9 +15,11 @@
             navigator.serviceWorker.register('./sw.js', { scope: './' });
         });
     }
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat' };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false };
     let aiChatState = [];
     let aiBusy = false;
+    let aiThinkingDots = 1;
+    let aiThinkingTimer = null;
     function showToast(message, type = 'info') {
         if (!toastEl) return;
         toastEl.textContent = message;
@@ -210,6 +212,7 @@
         next.aiKeysEnc = (next.aiKeysEnc && typeof next.aiKeysEnc === 'object') ? next.aiKeysEnc : {};
         if (next.aiKeyEnc && !next.aiKeysEnc[next.aiProvider || 'openrouter']) next.aiKeysEnc[next.aiProvider || 'openrouter'] = next.aiKeyEnc;
         next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
+        next.aiFreeOnly = !!next.aiFreeOnly;
         return next;
     }
     function getAIKeyInputId(provider) {
@@ -240,11 +243,24 @@
         aiBusy = !!nextBusy;
         const note = document.getElementById('ai-busy-note');
         if (note) note.style.display = aiBusy ? 'flex' : 'none';
+        if (aiBusy) {
+            aiThinkingDots = 1;
+            clearInterval(aiThinkingTimer);
+            aiThinkingTimer = setInterval(() => {
+                aiThinkingDots = aiThinkingDots >= 3 ? 1 : aiThinkingDots + 1;
+                renderAIChatLog();
+            }, 420);
+        } else {
+            clearInterval(aiThinkingTimer);
+            aiThinkingTimer = null;
+            aiThinkingDots = 1;
+        }
         ['ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread', 'ai-send-chat', 'ai-send-proofread', 'ai-chat-clear-btn'].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
             el.disabled = aiBusy || !navigator.onLine;
         });
+        renderAIChatLog();
     }
     async function stashAllProviderKeys() {
         state.aiKeysEnc = state.aiKeysEnc || {};
@@ -312,6 +328,8 @@
             if (el) el.value = aiKey || '';
         }
         await onAIProviderChange();
+        const freeOnly = document.getElementById('ai-free-only');
+        if (freeOnly) freeOnly.checked = !!state.aiFreeOnly;
         if (state.aiModel) document.getElementById('ai-model').innerHTML = `<option value=\"${state.aiModel}\">${state.aiModel}</option>`;
         document.getElementById('gh-repo').value = state.ghRepo || "";
         document.getElementById('device-name').value = state.deviceName || "";
@@ -337,6 +355,7 @@
         state.deviceName = document.getElementById('device-name').value.trim();
         state.aiProvider = document.getElementById('ai-provider')?.value || state.aiProvider || 'openrouter';
         state.aiModel = document.getElementById('ai-model')?.value || state.aiModel || '';
+        state.aiFreeOnly = !!document.getElementById('ai-free-only')?.checked;
         const ff = document.getElementById('folder-filter');
         if (ff) state.currentFolderId = ff.value || 'all';
         queuePersist();
@@ -1104,6 +1123,10 @@
             el.disabled = offline;
             el.parentElement.style.display = provider === nextProvider ? 'flex' : 'none';
         });
+        const freeOnly = document.getElementById('ai-free-only');
+        if (freeOnly) freeOnly.disabled = offline || nextProvider !== 'openrouter';
+        const freeOnlyRow = document.getElementById('ai-free-only-row');
+        if (freeOnlyRow) freeOnlyRow.style.display = nextProvider === 'openrouter' ? 'flex' : 'none';
         ['ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread', 'ai-send-chat', 'ai-send-proofread', 'ai-chat-clear-btn'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline || aiBusy;
@@ -1142,6 +1165,7 @@
         if (!navigator.onLine) return showToast('オフライン中は利用できません', 'error');
         const provider = document.getElementById('ai-provider').value;
         const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
+        const freeOnly = !!document.getElementById('ai-free-only')?.checked;
         if (!key) return showToast('AI API Keyを入力してください', 'error');
         try {
             let models = [];
@@ -1150,7 +1174,8 @@
                     headers: buildProviderHeaders('openrouter', key, false)
                 });
                 const j = await r.json();
-                models = (j.data || []).map((m) => m.id);
+                const openrouterModels = (j.data || []);
+                models = (freeOnly ? openrouterModels.filter((m) => Number(m?.pricing?.prompt || 0) === 0 && Number(m?.pricing?.completion || 0) === 0) : openrouterModels).map((m) => m.id);
             } else if (provider === 'groq') {
                 const r = await fetch('https://api.groq.com/openai/v1/models', { headers: buildProviderHeaders('groq', key, false) });
                 const j = await r.json();
@@ -1339,7 +1364,9 @@ ${scopeText.slice(0, 12000)}
     function renderAIChatLog() {
         const log = document.getElementById('ai-chat-log');
         if (!log) return;
-        log.innerHTML = (aiChatState || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).join('') || '<div class="config-item">会話履歴はありません</div>'; 
+        const rows = (aiChatState || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`);
+        if (aiBusy) rows.push(`<div class="config-item" style="display:block;"><div><strong>AI:</strong></div><div class="md-content">AIが思考中${'.'.repeat(aiThinkingDots)}</div></div>`);
+        log.innerHTML = rows.join('') || '<div class="config-item">会話履歴はありません</div>'; 
         log.scrollTop = log.scrollHeight;
     }
     window.addEventListener('online', onAIProviderChange);
@@ -1443,6 +1470,10 @@ ${scopeText.slice(0, 12000)}
     });
     ['openrouter', 'groq', 'google'].forEach((provider) => {
         document.getElementById(getAIKeyInputId(provider))?.addEventListener('input', queuePersist);
+    });
+    document.getElementById('ai-free-only')?.addEventListener('change', () => {
+        state.aiFreeOnly = !!document.getElementById('ai-free-only')?.checked;
+        queuePersist();
     });
     editor.addEventListener('pointerdown', closePanels);
     editor.addEventListener('dragover', (e) => { e.preventDefault(); });

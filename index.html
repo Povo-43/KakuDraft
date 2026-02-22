@@ -18,13 +18,13 @@
     <div id="editor-container"><div id="line-highlight"></div><textarea id="editor" placeholder="執筆を開始..."></textarea></div>
 
     <div id="memo-panel" class="side-panel">
-        <div style="font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px;">
+        <div class="scope-switch">
             <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話</span>
             <span id="scope-folder" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('folder')">● フォルダー</span><span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
-        <div style="display: flex; border-bottom: 1px solid var(--border);"><input type="text" id="new-memo-name" placeholder="＋メモ名" style="flex:1; border:none; padding:10px; font-size:11px; background:var(--input-bg); color:var(--text);"><button onclick="addMemoTab()" style="border:none; background:var(--panel); border-left:1px solid var(--border); width:50px; cursor:pointer; color:var(--text);"><span class="material-icons">add</span></button></div>
-        <textarea id="memo-area" style="flex:1; width:100%; border:none; outline:none; padding:15px; background:transparent; color:var(--text); resize:none; font-size:13px; line-height:1.7;"></textarea><div style="border-top:1px solid var(--border); padding:8px;"><button class="sys-btn" style="margin:0 0 6px 0;" onclick="document.getElementById('memo-attach-input').click()"><span class="material-icons" style="font-size:16px;">attach_file</span> 添付追加</button><input id="memo-attach-input" type="file" accept="image/*,audio/*,.txt,text/plain" style="display:none" onchange="attachMemoFile(this.files[0])"><div id="memo-attachments" class="config-list"></div></div>
+        <div class="memo-add-row"><input type="text" id="new-memo-name" placeholder="＋メモ名" class="input-plain"><button onclick="addMemoTab()" class="icon-btn"><span class="material-icons">add</span></button></div>
+        <textarea id="memo-area" class="memo-textarea"></textarea><div class="memo-attach-wrap"><button class="sys-btn attach-btn" onclick="document.getElementById('memo-attach-input').click()"><span class="material-icons" style="font-size:16px;">attach_file</span> 添付追加</button><input id="memo-attach-input" type="file" accept="image/*,audio/*,video/*,.txt,text/plain" style="display:none" onchange="attachMemoFile(this.files[0])"><div id="memo-attachments" class="config-list"></div><div id="memo-attachment-preview" class="config-list" style="display:none;"></div></div>
     </div>
 
     <div id="menu-panel" class="side-panel">
@@ -75,7 +75,19 @@
                 <div class="config-input-group"><input type="text" id="ins-label" placeholder="表示"><input type="text" id="ins-value" placeholder="内容"><button onclick="addListItem('insert')" style="border:1px solid var(--border); padding:0 10px;">+</button></div>
                 <h4>表示設定</h4>
                 <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div><label class="config-item" style="cursor:pointer;"><input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock(this.checked)"><span>画面消灯を防止</span></label>
-                <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
+
+                <h4>AI設定</h4>
+                <div class="config-input-group">
+                    <select id="ai-provider" class="field" onchange="onAIProviderChange()">
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="groq">Groq</option>
+                        <option value="google">Google</option>
+                    </select>
+                </div>
+                <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key"></div>
+                <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
+                <div class="config-input-group"><select id="ai-model" class="field"></select></div>
+<label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
                 <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
             </div>
 
@@ -104,21 +116,11 @@
 
     <div id="ai-panel" class="side-panel">
         <div class="panel-content">
-            <h4>AIアシスタント</h4>
+            <h4>AIアシスタント <button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></h4>
             <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
-            <div class="config-input-group">
-                <select id="ai-provider" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);" onchange="onAIProviderChange()">
-                    <option value="openrouter">OpenRouter</option>
-                    <option value="groq">Groq</option>
-                    <option value="google">Google</option>
-                </select>
-            </div>
-            <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key"></div>
-            <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
-            <div class="config-input-group"><select id="ai-model" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></select></div>
-            <div class="config-input-group"><select id="ai-scope" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-            <div style="display:flex; gap:6px; margin-bottom:8px;"><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲</button><button class="sys-btn" style="margin:0;" onclick="sendAIChat()"><span class="material-icons">chat</span> チャット</button></div>
-            <textarea id="ai-prompt" placeholder="AIへの指示" style="width:100%; min-height:70px; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></textarea>
+            <div class="config-input-group"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
+            <textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:88px;"></textarea>
+            <div style="display:flex; gap:6px; margin:8px 0;"><button class="sys-btn" style="margin:0;" onclick="sendAIChat()"><span class="material-icons">chat</span> 送信</button><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲ツール実行</button></div>
             <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
             <div id="ai-chat-log" class="config-list"></div>
         </div>
@@ -126,8 +128,8 @@
 </main>
 <div id="preview-overlay" onclick="this.style.display='none'"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<div id="search-panel" style="position:fixed; top:12px; right:12px; width:min(92vw,380px); border:1px solid var(--border); background:var(--panel); padding:10px; z-index:280; display:none;">
-  <div style="display:flex; gap:6px; margin-bottom:6px;"><input id="search-query" placeholder="検索" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"><input id="replace-query" placeholder="置換" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></div>
+<div id="search-panel" class="floating-panel">
+  <div style="display:flex; gap:6px; margin-bottom:6px;"><input id="search-query" class="field" placeholder="検索"><input id="replace-query" class="field" placeholder="置換"></div>
   <div style="display:flex; gap:6px;"><button class="sys-btn" onclick="findNext()" style="margin:0;">次を検索</button><button class="sys-btn" onclick="replaceCurrent()" style="margin:0;">置換</button><button class="sys-btn" onclick="replaceAllMatches()" style="margin:0;">すべて置換</button></div>
 </div>
 <footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="toggleSearchPanel()"><span class="material-icons">find_replace</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('ai-panel')"><span class="material-icons">smart_toy</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>

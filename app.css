@@ -36,7 +36,7 @@ main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relati
 .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
 .chapter-item { padding: 10px; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
 .chapter-item.active { background: var(--bg); font-weight: bold; }
-button { color: var(--text); }
+button { color: var(--text); background: none; border: none;}
 footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
 .btn-group { display: flex; overflow-x: auto; }
 footer button { height: 45px; min-width: 45px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -47,3 +47,23 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #toast.success { border-color: #2e7d32; }
 #toast.error { border-color: #c62828; }
+.field {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  border-radius: 6px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+}
+.scope-switch { font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px; }
+.memo-add-row { display: flex; border-bottom: 1px solid var(--border); }
+.input-plain { flex: 1; border: none; padding: 10px; font-size: 11px; background: var(--input-bg); color: var(--text); }
+.icon-btn { border: none; background: var(--panel); border-left: 1px solid var(--border); width: 50px; cursor: pointer; color: var(--text); }
+.memo-textarea { flex: 1; width: 100%; border: none; outline: none; padding: 15px; background: transparent; color: var(--text); resize: none; font-size: 13px; line-height: 1.7; box-sizing: border-box; }
+.memo-attach-wrap { border-top: 1px solid var(--border); padding: 8px; }
+.attach-btn { margin: 0 0 6px 0; }
+.floating-panel { position: fixed; top: 12px; right: 12px; width: min(92vw, 380px); border: 1px solid var(--border); background: var(--panel); padding: 10px; z-index: 280; display: none; border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,0.2); }
+.attachment-preview-media { max-width: 100%; max-height: 220px; display: block; margin: 0 auto; }
+.preview-text { white-space: pre-wrap; overflow: auto; max-height: 220px; }

@@ -1,6 +1,6 @@
     const editor = document.getElementById('editor'); const memoArea = document.getElementById('memo-area'); const hl = document.getElementById('line-highlight');
     const DB_NAME = 'kakudraft-db';
-    const DB_VERSION = 1;
+    const DB_VERSION = 2;
     const STATE_KEY = 'app-state';
     const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
     const REPO_DATA_PATH = 'kakudraft_data.json';
@@ -71,6 +71,7 @@
                 const db = event.target.result;
                 if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
                 if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' });
+                if (!db.objectStoreNames.contains('attachments')) db.createObjectStore('attachments', { keyPath: 'id' });
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error);
@@ -98,6 +99,48 @@
         });
     }
 
+
+
+    async function dbDelete(storeName, key) {
+        const db = await openDb();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(storeName, 'readwrite');
+            const request = tx.objectStore(storeName).delete(key);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function storeAttachmentBlob(file, data) {
+        const id = `att_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
+        await dbPut('attachments', { id, name: file.name, type: file.type || 'application/octet-stream', data, size: file.size || 0, createdAt: Date.now() });
+        return { id, name: file.name, type: file.type || 'application/octet-stream', size: file.size || 0, createdAt: Date.now(), storage: 'idb', githubPath: null };
+    }
+
+    async function getAttachmentData(ref) {
+        if (!ref) return null;
+        if (!ref.id && typeof ref.data !== 'undefined') return { id: '', name: ref.name, type: ref.type, data: ref.data, size: ref.size || 0 };
+        if (!ref?.id) return null;
+        const local = await dbGet('attachments', ref.id);
+        if (local?.data) return local;
+        if (ref.githubPath) {
+            const token = document.getElementById('gh-token')?.value?.trim();
+            const repoInput = state.ghRepo;
+            const parsedRepo = parseRepoTarget(repoInput || '', undefined);
+            if (!token || !parsedRepo) return null;
+            const url = `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/contents/${ref.githubPath}`;
+            const res = await requestJson(url, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' } });
+            if (res.res.ok && res.body?.content) {
+                const b64 = res.body.content.replace(/\n/g, '');
+                const binary = atob(b64);
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                const blob = new Blob([bytes], { type: ref.type || 'application/octet-stream' });
+                await dbPut('attachments', { id: ref.id, name: ref.name, type: ref.type, data: blob, size: ref.size || bytes.length, createdAt: ref.createdAt || Date.now() });
+                return { id: ref.id, name: ref.name, type: ref.type, data: blob, size: ref.size || bytes.length };
+            }
+        }
+        return null;
+    }
     async function addLocalSnapshot(label, data) {
         const snapshot = {
             id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -164,7 +207,7 @@
         next.chapters = (next.chapters || []).map((ch, idx) => ({
             title: ch.title || `第${idx + 1}話`,
             body: ch.body || '',
-            memos: (ch.memos && ch.memos.length ? ch.memos : [{name:'メモ', content:''}]).map((m)=>({name:m.name||'メモ', content:m.content||'', attachments:m.attachments||[]})),
+            memos: (ch.memos && ch.memos.length ? ch.memos : [{name:'メモ', content:''}]).map((m)=>({name:m.name||'メモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))})),
             currentMemoIdx: Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0,
             snapshots: ch.snapshots || [],
             folderId: ch.folderId || 'root'
@@ -173,10 +216,10 @@
         next.folders = next.folders && next.folders.length ? next.folders : [{id:'root',name:'既定'}];
         if (!next.folders.some((f) => f.id === 'root')) next.folders.unshift({id:'root',name:'既定'});
         next.currentFolderId = next.currentFolderId || 'all';
-        next.globalMemos = (next.globalMemos && next.globalMemos.length ? next.globalMemos : [{name:'共通設定', content:'', attachments:[]}]).map((m)=>({name:m.name||'共通設定', content:m.content||'', attachments:m.attachments||[]}));
+        next.globalMemos = (next.globalMemos && next.globalMemos.length ? next.globalMemos : [{name:'共通設定', content:'', attachments:[]}]).map((m)=>({name:m.name||'共通設定', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))}));
         Object.keys(next.folderMemos).forEach((k)=>{
             const bundle = next.folderMemos[k] || { memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0 };
-            bundle.memos = (bundle.memos && bundle.memos.length ? bundle.memos : [{name:'フォルダーメモ',content:'',attachments:[]}]).map((m)=>({name:m.name||'フォルダーメモ', content:m.content||'', attachments:m.attachments||[]}));
+            bundle.memos = (bundle.memos && bundle.memos.length ? bundle.memos : [{name:'フォルダーメモ',content:'',attachments:[]}]).map((m)=>({name:m.name||'フォルダーメモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))}));
             if (!Number.isInteger(bundle.currentMemoIdx)) bundle.currentMemoIdx = 0;
             next.folderMemos[k] = bundle;
         });
@@ -246,6 +289,7 @@
         const wl = document.getElementById('wakelock-toggle'); if (wl) wl.checked = !!state.keepScreenOn;
         updateOnlineFontUI();
         if (state.keepScreenOn) toggleWakeLock(true);
+        renderAIChatLog();
         refreshUI(); loadChapter(state.currentIdx);
     };
 
@@ -279,6 +323,29 @@
             headers,
             body: JSON.stringify({ message: `snapshot: ${reason}`, content })
         });
+    }
+
+
+    async function syncAttachmentsToGithub(headers, owner, repo) {
+        const refs = [];
+        const collect = (memos) => (memos || []).forEach((m) => (m.attachments || []).forEach((a) => refs.push(a)));
+        state.chapters.forEach((c) => collect(c.memos));
+        collect(state.globalMemos);
+        Object.values(state.folderMemos || {}).forEach((b) => collect(b.memos));
+        for (const ref of refs) {
+            if (!ref.id || ref.githubPath) continue;
+            const stored = await dbGet('attachments', ref.id);
+            if (!stored?.data) continue;
+            const bytes = new Uint8Array(await (stored.data instanceof Blob ? stored.data.arrayBuffer() : new Blob([stored.data]).arrayBuffer()));
+            let binary = '';
+            for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+            const content = btoa(binary);
+            const ext = (ref.name.includes('.') ? ref.name.slice(ref.name.lastIndexOf('.')) : '');
+            const path = `kakudraft_assets/${ref.id}${ext}`;
+            const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+            await fetch(apiUrl, { method: 'PUT', headers, body: JSON.stringify({ message: `asset: ${ref.name}`, content }) });
+            ref.githubPath = path;
+        }
     }
 
     async function githubSync(mode) {
@@ -341,8 +408,9 @@
 
                 const putRes = await requestJson(apiUrl, { method: "PUT", headers, body: JSON.stringify(body) });
                 if (!putRes.res.ok) throw new Error(putRes.body?.message || "アップロード失敗");
+                await syncAttachmentsToGithub(headers, owner, repo);
 
-                showToast('アップロード成功', 'success');
+                showToast('アップロード成功（添付を別フォルダー管理）', 'success');
             } else {
                 if (!remoteData) {
                     showToast('リモートにデータがありません。先にUPしてください。', 'error');
@@ -470,6 +538,7 @@
         `).join('');
 
         memoArea.value = m[a] ? m[a].content : "";
+        const pane = document.getElementById('memo-attachment-preview'); if (pane) pane.style.display = 'none';
         renderMemoAttachments();
         document.getElementById('scope-local').style.opacity = state.memoScope === 'local' ? '1' : '0.5';
         document.getElementById('scope-folder').style.opacity = state.memoScope === 'folder' ? '1' : '0.5';
@@ -711,38 +780,53 @@
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
         const files = memo?.attachments || [];
-        box.innerHTML = files.map((f, i) => `<div class="config-item"><span class="material-icons" style="font-size:16px;">${f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audiotrack' : 'description'}</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${f.name}</span><button onclick="openMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">open_in_new</span></button><button onclick="removeMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">delete</span></button></div>`).join('') || '<div class="config-item">添付なし</div>';
+        box.innerHTML = files.map((f, i) => `<div class="config-item"><span class="material-icons" style="font-size:16px;">${f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audiotrack' : f.type.startsWith('video/') ? 'movie' : 'description'}</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${f.name}</span><button onclick="previewMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">preview</span></button><button onclick="removeMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">delete</span></button></div>`).join('') || '<div class="config-item">添付なし</div>';
     }
     async function attachMemoFile(file) {
         if (!file) return;
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
         if (!memo.attachments) memo.attachments = [];
-        let data;
-        if (file.type.startsWith('text/') || file.name.endsWith('.txt')) data = await file.text();
-        else data = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(file); });
-        memo.attachments.push({ name:file.name, type:file.type || 'text/plain', data, createdAt:Date.now() });
+        const data = file.type.startsWith('text/') || file.name.endsWith('.txt') ? await file.text() : file;
+        const ref = await storeAttachmentBlob(file, data);
+        memo.attachments.push(ref);
         document.getElementById('memo-attach-input').value = '';
         renderMemoAttachments();
+        await previewMemoAttachment(memo.attachments.length - 1);
         save();
     }
-    function openMemoAttachment(i) {
+    async function previewMemoAttachment(i) {
+        const pane = document.getElementById('memo-attachment-preview');
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
-        const f = memo?.attachments?.[i];
-        if (!f) return;
-        if (typeof f.data === 'string' && f.data.startsWith('data:')) {
-            const a = document.createElement('a'); a.href = f.data; a.download = f.name; a.click();
+        const ref = memo?.attachments?.[i];
+        if (!ref || !pane) return;
+        const stored = await getAttachmentData(ref);
+        if (!stored) return showToast('添付データを取得できませんでした', 'error');
+        pane.style.display = 'block';
+        if ((ref.type || '').startsWith('image/')) {
+            const url = URL.createObjectURL(stored.data);
+            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><img class="attachment-preview-media" src="${url}"></div>`;
+        } else if ((ref.type || '').startsWith('audio/')) {
+            const url = URL.createObjectURL(stored.data);
+            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><audio class="attachment-preview-media" controls src="${url}"></audio></div>`;
+        } else if ((ref.type || '').startsWith('video/')) {
+            const url = URL.createObjectURL(stored.data);
+            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><video class="attachment-preview-media" controls src="${url}"></video></div>`;
         } else {
-            showPreview();
-            document.getElementById('preview-overlay').innerHTML = `<pre style="white-space:pre-wrap;">${(f.data || '').replace(/[&<>]/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]))}</pre>`;
+            const text = typeof stored.data === 'string' ? stored.data : await stored.data.text();
+            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><pre class="preview-text">${(text || '').replace(/[&<>]/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]))}</pre></div>`;
         }
     }
-    function removeMemoAttachment(i) {
+    async function removeMemoAttachment(i) {
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
+        const ref = memo?.attachments?.[i];
         if (!memo?.attachments) return;
         memo.attachments.splice(i, 1);
+        if (ref?.id) await dbDelete('attachments', ref.id);
+        const pane = document.getElementById('memo-attachment-preview');
+        if (pane) pane.style.display = 'none';
         renderMemoAttachments(); save();
     }
 
@@ -965,13 +1049,18 @@
     }
 
 
+    function openAISettings() {
+        togglePanel('menu-panel');
+        switchMenuTab('settings');
+    }
+
     function onAIProviderChange() {
         const provider = document.getElementById('ai-provider')?.value || 'openrouter';
         state.aiProvider = provider;
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
-        ['ai-api-key', 'ai-model', 'ai-prompt'].forEach((id) => {
+        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-scope'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline;
         });
@@ -1054,8 +1143,8 @@
             ], false);
             state.aiChat = state.aiChat || [];
             state.aiChat.push({ q: prompt, a: ans, at: Date.now() });
-            state.aiChat = state.aiChat.slice(-12);
-            document.getElementById('ai-chat-log').innerHTML = state.aiChat.map((x) => `<div class="config-item" style="white-space:normal;display:block;"><div><strong>Q:</strong> ${x.q}</div><div><strong>A:</strong> ${x.a.replace(/\n/g, '<br>')}</div></div>`).reverse().join('');
+            state.aiChat = state.aiChat.slice(-20);
+            renderAIChatLog();
             showToast('AIチャット応答を取得しました', 'success');
             save();
         } catch (e) { showToast(`AIチャット失敗: ${e.message}`, 'error'); }
@@ -1083,6 +1172,10 @@
         save(); updateHighlight(); updateStats();
         showToast(`置換適用: ${r.from} → ${r.to}`, 'success');
     }
+    function renderAIChatLog() {
+        document.getElementById('ai-chat-log').innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="white-space:normal;display:block;"><div><strong>あなた:</strong> ${x.q}</div><div><strong>AI:</strong> ${x.a.replace(/\n/g, '<br>')}</div></div>`).reverse().join('') || '<div class="config-item">会話履歴はありません</div>';
+    }
+
     window.addEventListener('online', onAIProviderChange);
     window.addEventListener('offline', onAIProviderChange);
 

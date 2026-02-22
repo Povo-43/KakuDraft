@@ -34,6 +34,7 @@
                 <div class="tab active" data-tab="favorites" onclick="switchMenuTab('favorites')">お気に入り</div>
                 <div class="tab" data-tab="chapters" onclick="switchMenuTab('chapters')">話管理</div>
                 <div class="tab" data-tab="settings" onclick="switchMenuTab('settings')">設定</div>
+                <div class="tab" data-tab="ai" onclick="switchMenuTab('ai')">AI</div>
                 <div class="tab" data-tab="backup" onclick="switchMenuTab('backup')">バックアップ</div>
                 <div class="tab" data-tab="analytics" onclick="switchMenuTab('analytics')">統計</div>
             </div>
@@ -76,6 +77,11 @@
                 <h4>表示設定</h4>
                 <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div><label class="config-item" style="cursor:pointer;"><input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock(this.checked)"><span>画面消灯を防止</span></label>
 
+<label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-ai" style="display:none;">
                 <h4>AI設定</h4>
                 <div class="config-input-group">
                     <select id="ai-provider" class="field" onchange="onAIProviderChange()">
@@ -90,8 +96,8 @@
                 <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
                 <div class="config-input-group"><select id="ai-model" class="field"></select></div>
                 <label id="ai-free-only-row" class="config-item" style="cursor:pointer;"><input id="ai-free-only" type="checkbox"><span>無料モデルのみ（OpenRouterのみ）</span></label>
-<label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
-                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+                <h4>AI使用量（取得できた分）</h4>
+                <div id="ai-usage" class="config-list"></div>
             </div>
 
             <div class="menu-tab-panel" id="menu-tab-backup" style="display:none;">

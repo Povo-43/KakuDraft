@@ -84,7 +84,7 @@
                         <option value="google">Google</option>
                     </select>
                 </div>
-                <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key"></div>
+                <div class="config-input-group"><input id="ai-api-key" type="password" placeholder="API Key（プロバイダごとに保存）"></div>
                 <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
                 <div class="config-input-group"><select id="ai-model" class="field"></select></div>
 <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
@@ -115,22 +115,39 @@
     </div>
 
     <div id="ai-panel" class="side-panel">
-        <div class="panel-content">
+        <div class="panel-content ai-panel-content">
             <h4>AIアシスタント <button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></h4>
             <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
             <div class="config-input-group"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
-            <textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:88px;"></textarea>
-            <div style="display:flex; gap:6px; margin:8px 0;"><button class="sys-btn" style="margin:0;" onclick="sendAIChat()"><span class="material-icons">chat</span> 送信</button><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲ツール実行</button></div>
-            <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
-            <div id="ai-chat-log" class="config-list"></div>
+            <div class="tab-bar ai-inner-tabs">
+                <div id="ai-tab-chat" class="tab active" onclick="switchAITab('chat')">チャット</div>
+                <div id="ai-tab-proofread" class="tab" onclick="switchAITab('proofread')">校閲</div>
+            </div>
+            <div id="ai-panel-chat" class="ai-sub-panel">
+                <div id="ai-chat-log" class="config-list ai-chat-log"></div>
+                <div class="ai-composer">
+                    <textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:88px;"></textarea>
+                    <div style="display:flex; gap:6px; margin:8px 0 0;"><button class="sys-btn" style="margin:0;" onclick="sendAIChat()"><span class="material-icons">send</span> 送信</button></div>
+                </div>
+            </div>
+            <div id="ai-panel-proofread" class="ai-sub-panel" style="display:none;">
+                <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
+                <div class="ai-composer">
+                    <textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea>
+                    <div style="display:flex; gap:6px; margin:8px 0 0;"><button class="sys-btn" style="margin:0;" onclick="runAIProofread()"><span class="material-icons">spellcheck</span> 校閲実行</button></div>
+                </div>
+            </div>
         </div>
     </div>
 </main>
 <div id="preview-overlay" onclick="this.style.display='none'"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<div id="search-panel" class="floating-panel">
-  <div style="display:flex; gap:6px; margin-bottom:6px;"><input id="search-query" class="field" placeholder="検索"><input id="replace-query" class="field" placeholder="置換"></div>
-  <div style="display:flex; gap:6px;"><button class="sys-btn" onclick="findNext()" style="margin:0;">次を検索</button><button class="sys-btn" onclick="replaceCurrent()" style="margin:0;">置換</button><button class="sys-btn" onclick="replaceAllMatches()" style="margin:0;">すべて置換</button></div>
+<div id="search-panel" class="floating-panel compact-search-panel">
+  <div class="search-panel-head"><strong>検索</strong><button class="icon-btn compact-icon-btn" title="閉じる" onclick="toggleSearchPanel(false, true)"><span class="material-icons">close</span></button></div>
+  <div class="search-row"><span class="material-icons">search</span><input id="search-query" class="field" placeholder="検索（Enter）"></div>
+  <div class="search-row"><span class="material-icons">edit</span><input id="replace-query" class="field" placeholder="置換"></div>
+  <div class="search-actions compact-actions"><button class="sys-btn icon-only-btn" title="次を検索" onclick="findNext()"><span class="material-icons">south</span></button><button class="sys-btn icon-only-btn" title="置換" onclick="replaceCurrent()"><span class="material-icons">find_replace</span></button><button class="sys-btn icon-only-btn" title="すべて置換" onclick="replaceAllMatches()"><span class="material-icons">done_all</span></button><button class="sys-btn icon-only-btn" title="件数更新" onclick="collectSearchResults()"><span class="material-icons">refresh</span></button></div>
+  <div class="search-options"><label><input id="search-regex" type="checkbox"> 正規</label><label><input id="search-all-chapters" type="checkbox"> 全話</label></div>
 </div>
 <footer><div id="quick-buttons" class="btn-group"></div><div class="btn-group"><button onclick="showPreview()"><span class="material-icons">visibility</span></button><button onclick="toggleSearchPanel()"><span class="material-icons">find_replace</span></button><button onclick="togglePanel('memo-panel')"><span class="material-icons">description</span></button><button onclick="togglePanel('ai-panel')"><span class="material-icons">smart_toy</span></button><button onclick="togglePanel('menu-panel')" style="border-right:none;"><span class="material-icons">menu</span></button></div></footer>
 

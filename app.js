@@ -232,12 +232,18 @@
         return next;
     }
 
-    async function stashCurrentProviderKey() {
-        const provider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
-        const aiKeyPlain = document.getElementById('ai-api-key')?.value || '';
+    function getAIKeyInputId(provider) {
+        return `ai-api-key-${provider}`;
+    }
+
+    async function stashAllProviderKeys() {
         state.aiKeysEnc = state.aiKeysEnc || {};
-        state.aiKeysEnc[provider] = await encryptPatToken(aiKeyPlain, state.deviceName);
-        state.aiKeyEnc = state.aiKeysEnc[provider] || '';
+        for (const provider of ['openrouter', 'groq', 'google']) {
+            const aiKeyPlain = document.getElementById(getAIKeyInputId(provider))?.value || '';
+            state.aiKeysEnc[provider] = await encryptPatToken(aiKeyPlain, state.deviceName);
+        }
+        const activeProvider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
+        state.aiKeyEnc = state.aiKeysEnc[activeProvider] || '';
     }
 
     async function getProviderKey(provider) {
@@ -251,7 +257,7 @@
         const tokenPlain = document.getElementById('gh-token').value || '';
         state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
         state.ghTokenLegacy = '';
-        await stashCurrentProviderKey();
+        await stashAllProviderKeys();
         await dbPut('kv', JSON.stringify(state), STATE_KEY);
     }
 
@@ -292,8 +298,11 @@
         }
         document.getElementById('gh-token').value = token;
         document.getElementById('ai-provider').value = state.aiProvider || 'openrouter';
-        const aiKey = await getProviderKey(state.aiProvider || 'openrouter');
-        document.getElementById('ai-api-key').value = aiKey || '';
+        for (const provider of ['openrouter', 'groq', 'google']) {
+            const aiKey = await getProviderKey(provider);
+            const el = document.getElementById(getAIKeyInputId(provider));
+            if (el) el.value = aiKey || '';
+        }
         await onAIProviderChange();
         if (state.aiModel) document.getElementById('ai-model').innerHTML = `<option value=\"${state.aiModel}\">${state.aiModel}</option>`;
         document.getElementById('gh-repo').value = state.ghRepo || "";
@@ -1093,18 +1102,17 @@
 
     async function onAIProviderChange() {
         const nextProvider = document.getElementById('ai-provider')?.value || 'openrouter';
-        const prevProvider = state.aiProvider || nextProvider;
-        if (document.getElementById('ai-api-key')) {
-            state.aiKeysEnc = state.aiKeysEnc || {};
-            state.aiKeysEnc[prevProvider] = await encryptPatToken(document.getElementById('ai-api-key').value || '', state.deviceName);
-        }
         state.aiProvider = nextProvider;
-        const nextKey = await getProviderKey(nextProvider);
-        if (document.getElementById('ai-api-key')) document.getElementById('ai-api-key').value = nextKey || '';
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
-        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
+        ['openrouter', 'groq', 'google'].forEach((provider) => {
+            const el = document.getElementById(getAIKeyInputId(provider));
+            if (!el) return;
+            el.disabled = offline;
+            el.parentElement.style.display = provider === nextProvider ? 'flex' : 'none';
+        });
+        ['ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline;
         });
@@ -1122,7 +1130,7 @@
     async function fetchAIModels() {
         if (!navigator.onLine) return showToast('オフライン中は利用できません', 'error');
         const provider = document.getElementById('ai-provider').value;
-        const key = document.getElementById('ai-api-key').value.trim();
+        const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
         if (!key) return showToast('AI API Keyを入力してください', 'error');
         try {
             let models = [];
@@ -1157,7 +1165,7 @@
     async function callAI(messages, jsonMode = false) {
         if (!navigator.onLine) throw new Error('オフライン中です');
         const provider = document.getElementById('ai-provider').value;
-        const key = document.getElementById('ai-api-key').value.trim();
+        const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
         const model = document.getElementById('ai-model').value.trim();
         if (!key || !model) throw new Error('APIキーとモデルを設定してください');
 
@@ -1404,6 +1412,9 @@
         const scope = document.getElementById('ai-scope');
         if (scope) scope.value = e.target.value;
         save();
+    });
+    ['openrouter', 'groq', 'google'].forEach((provider) => {
+        document.getElementById(getAIKeyInputId(provider))?.addEventListener('input', queuePersist);
     });
     editor.addEventListener('pointerdown', closePanels);
     editor.addEventListener('dragover', (e) => { e.preventDefault(); });

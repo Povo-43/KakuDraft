@@ -1,9 +1,10 @@
-const CACHE_NAME = 'kakudraft-v3'; // 更新時はここを v3, v4 と上げる
+const CACHE_NAME = 'kakudraft-v4'; // 更新時はここを v3, v4 と上げる
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.json',
   './icon.png',
+  './help.html',
   'https://fonts.googleapis.com/icon?family=Material+Icons'
 ];
 

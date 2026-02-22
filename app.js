@@ -3,7 +3,7 @@
     const DB_VERSION = 2;
     const STATE_KEY = 'app-state';
     const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
-    const CLOUD_PATHS = { settings: '設定/settings.json', keys: 'キー類/keys.json', stories: '話/stories.json', memos: 'メモ/memos.json', aiChat: '話/ai_chat.json', metadata: '設定/sync_metadata.json' };
+    const CLOUD_PATHS = { settings: '設定/settings.json', keys: 'キー類/keys.json', stories: '話/stories.json', memos: 'メモ/memos.json', aiChat: '話/ai_chat.json', metadata: '設定/sync_metadata.json', assetsIndex: '設定/assets_index.json' };
     const LEGACY_CLOUD_PATHS = { data: 'kakudraft_data.json', aiChat: 'kakudraft_ai_chat.json' };
     const AI_CHAT_KEY = 'ai-chat';
     const toastEl = document.getElementById('toast');
@@ -15,7 +15,7 @@
             navigator.serviceWorker.register('./sw.js', { scope: './' });
         });
     }
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false, aiUsage:{}, syncMeta:{} };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定タグ'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false, aiUsage:{}, syncMeta:{}, assetsIndex:{items:[]} };
     let aiChatState = [];
     let aiBusy = false;
     let aiThinkingDots = 1;
@@ -196,13 +196,13 @@
             folderId: ch.folderId || 'root'
         }));
         if (!next.chapters.length) next.chapters = [{title:'第一話', body:'', memos:[{name:'メモ', content:''}], currentMemoIdx:0, snapshots:[], folderId:'root'}];
-        next.folders = next.folders && next.folders.length ? next.folders : [{id:'root',name:'既定'}];
-        if (!next.folders.some((f) => f.id === 'root')) next.folders.unshift({id:'root',name:'既定'});
+        next.folders = next.folders && next.folders.length ? next.folders : [{id:'root',name:'既定タグ'}];
+        if (!next.folders.some((f) => f.id === 'root')) next.folders.unshift({id:'root',name:'既定タグ'});
         next.currentFolderId = next.currentFolderId || 'all';
         next.globalMemos = (next.globalMemos && next.globalMemos.length ? next.globalMemos : [{name:'共通設定', content:'', attachments:[]}]).map((m)=>({name:m.name||'共通設定', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))}));
         Object.keys(next.folderMemos).forEach((k)=>{
-            const bundle = next.folderMemos[k] || { memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0 };
-            bundle.memos = (bundle.memos && bundle.memos.length ? bundle.memos : [{name:'フォルダーメモ',content:'',attachments:[]}]).map((m)=>({name:m.name||'フォルダーメモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))}));
+            const bundle = next.folderMemos[k] || { memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0 };
+            bundle.memos = (bundle.memos && bundle.memos.length ? bundle.memos : [{name:'タグメモ',content:'',attachments:[]}]).map((m)=>({name:m.name||'タグメモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))}));
             if (!Number.isInteger(bundle.currentMemoIdx)) bundle.currentMemoIdx = 0;
             next.folderMemos[k] = bundle;
         });
@@ -215,6 +215,7 @@
         next.aiFreeOnly = !!next.aiFreeOnly;
         next.aiUsage = (next.aiUsage && typeof next.aiUsage === 'object') ? next.aiUsage : {};
         next.syncMeta = (next.syncMeta && typeof next.syncMeta === 'object') ? next.syncMeta : {};
+        next.assetsIndex = (next.assetsIndex && Array.isArray(next.assetsIndex.items)) ? next.assetsIndex : {items:[]};
         return next;
     }
     function getAIKeyInputId(provider) {
@@ -443,7 +444,8 @@
             keys: { ghTokenEnc: state.ghTokenEnc, ghRepo: state.ghRepo, deviceName: state.deviceName, aiKeyEnc: state.aiKeyEnc, aiKeysEnc: state.aiKeysEnc },
             stories: { chapters: state.chapters, currentIdx: state.currentIdx, writingSessions: state.writingSessions },
             memos: { globalMemos: state.globalMemos, currentGlobalMemoIdx: state.currentGlobalMemoIdx, memoScope: state.memoScope, folderMemos: state.folderMemos },
-            aiChat: { list: aiChatState || [] }
+            aiChat: { list: aiChatState || [] },
+            assetsIndex: state.assetsIndex || {items:[]}
         };
     }
     function applyCloudPieces(remote) {
@@ -453,6 +455,7 @@
         if (remote.stories) { merged.chapters = remote.stories.chapters || merged.chapters; merged.currentIdx = Number.isInteger(remote.stories.currentIdx) ? remote.stories.currentIdx : merged.currentIdx; merged.writingSessions = remote.stories.writingSessions || merged.writingSessions; }
         if (remote.memos) { merged.globalMemos = remote.memos.globalMemos || merged.globalMemos; merged.currentGlobalMemoIdx = Number.isInteger(remote.memos.currentGlobalMemoIdx) ? remote.memos.currentGlobalMemoIdx : merged.currentGlobalMemoIdx; merged.memoScope = remote.memos.memoScope || merged.memoScope; merged.folderMemos = remote.memos.folderMemos || merged.folderMemos; }
         if (remote.aiChat?.list) aiChatState = Array.isArray(remote.aiChat.list) ? remote.aiChat.list.slice(-100) : [];
+        if (remote.assetsIndex) merged.assetsIndex = remote.assetsIndex;
         state = normalizeStateShape(merged);
     }
     function convertLegacyRemoteToPieces(legacyData, legacyAiChat) {
@@ -496,6 +499,7 @@
                 folderMemos: normalized.folderMemos || {}
             },
             aiChat: { list: Array.isArray(legacyAiChat) ? legacyAiChat.slice(-100) : [] },
+            assetsIndex: { items: [] },
             metadata: { updatedAt: Date.now(), migratedFrom: 'legacy-cloud-format' }
         };
         return pieces;
@@ -523,7 +527,7 @@
         }
         if (!legacyData && !legacyAiChat) return false;
         const migrated = convertLegacyRemoteToPieces(legacyData || {}, legacyAiChat || []);
-        for (const key of ['settings','keys','stories','memos','aiChat']) {
+        for (const key of ['settings','keys','stories','memos','aiChat','assetsIndex']) {
             remote[key] = migrated[key];
             await putCloudPiece(headers, owner, repo, key, migrated[key]);
         }
@@ -531,6 +535,79 @@
         await putCloudPiece(headers, owner, repo, 'metadata', migrated.metadata, remoteMeta.metadata?.sha || '');
         showToast('旧形式クラウドデータを新形式へ移行しました', 'success');
         return true;
+    }
+
+    function buildAttachmentIndex() {
+        const items = [];
+        const pick = (scope, ownerId, memoId, memo) => {
+            (memo.attachments || []).forEach((a) => {
+                items.push({ scope, ownerId, memoId, id: a.id, name: a.name, type: a.type, size: a.size || 0, createdAt: a.createdAt || Date.now(), githubPath: a.githubPath || null });
+            });
+        };
+        state.chapters.forEach((ch, ci) => (ch.memos || []).forEach((m, mi) => pick('chapter', String(ci), String(mi), m)));
+        (state.globalMemos || []).forEach((m, i) => pick('global', 'global', String(i), m));
+        Object.entries(state.folderMemos || {}).forEach(([fid, bundle]) => (bundle.memos || []).forEach((m, i) => pick('folder', fid, String(i), m)));
+        return { items, updatedAt: Date.now() };
+    }
+    function getCurrentMemoCloudKey() {
+        if (state.memoScope === 'local') return { scope:'chapter', ownerId:String(state.currentIdx), memoId:String(state.chapters[state.currentIdx]?.currentMemoIdx || 0) };
+        if (state.memoScope === 'folder') { const b = getCurrentFolderMemoBundle(); return { scope:'folder', ownerId: (state.currentFolderId && state.currentFolderId !== 'all') ? state.currentFolderId : 'root', memoId:String(b.currentMemoIdx || 0) }; }
+        return { scope:'global', ownerId:'global', memoId:String(state.currentGlobalMemoIdx || 0) };
+    }
+    async function syncCurrentMemoAttachmentsFromCloud() {
+        if (!navigator.onLine) return;
+        const token = document.getElementById('gh-token')?.value?.trim();
+        const parsedRepo = parseRepoTarget(state.ghRepo || '', undefined);
+        if (!token || !parsedRepo) return;
+        const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' };
+        const url = `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/contents/${CLOUD_PATHS.assetsIndex}`;
+        const res = await requestJson(url, { headers });
+        if (!res.res.ok || !res.body?.content) return;
+        const remote = fromBase64ToJson(res.body.content);
+        if (!Array.isArray(remote?.items)) return;
+        state.assetsIndex = { items: remote.items, updatedAt: remote.updatedAt || Date.now() };
+        const key = getCurrentMemoCloudKey();
+        const refs = remote.items.filter((x) => x.scope===key.scope && x.ownerId===key.ownerId && x.memoId===key.memoId);
+        if (!refs.length) return;
+        const memo = getCurrentMemo();
+        memo.attachments = memo.attachments || [];
+        const ids = new Set(memo.attachments.map((x)=>x.id));
+        refs.forEach((r) => { if (!ids.has(r.id)) memo.attachments.push({ id:r.id, name:r.name, type:r.type, size:r.size, createdAt:r.createdAt, storage:'idb', githubPath:r.githubPath }); });
+    }
+    async function uploadAttachmentNow(ref) {
+        if (!ref?.id) return;
+        const token = document.getElementById('gh-token')?.value?.trim();
+        const parsedRepo = parseRepoTarget(state.ghRepo || '', undefined);
+        if (!token || !parsedRepo) return;
+        const headers = { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' };
+        const stored = await dbGet('attachments', ref.id);
+        if (!stored?.data) return;
+        const bytes = new Uint8Array(await (stored.data instanceof Blob ? stored.data.arrayBuffer() : new Blob([stored.data]).arrayBuffer()));
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        const ext = (ref.name.includes('.') ? ref.name.slice(ref.name.lastIndexOf('.')) : '');
+        const path = ref.githubPath || `kakudraft_assets/${ref.id}${ext}`;
+        const apiUrl = `https://api.github.com/repos/${parsedRepo.owner}/${parsedRepo.repo}/contents/${path}`;
+        const oldRes = await requestJson(apiUrl, { headers });
+        const body = { message: `asset: ${ref.name}`, content: btoa(binary) };
+        if (oldRes.res.status === 200 && oldRes.body?.sha) body.sha = oldRes.body.sha;
+        const putRes = await requestJson(apiUrl, { method:'PUT', headers, body: JSON.stringify(body) });
+        if (!putRes.res.ok) throw new Error(putRes.body?.message || '添付アップロード失敗');
+        ref.githubPath = path;
+        state.assetsIndex = buildAttachmentIndex();
+        await putCloudPiece(headers, parsedRepo.owner, parsedRepo.repo, 'assetsIndex', state.assetsIndex);
+    }
+    function buildTextBackupFiles() {
+        const files = {};
+        (state.chapters || []).forEach((ch, i) => {
+            const cid = ch.id || `chapter_${i + 1}`;
+            files[`話/${cid}/body.txt`] = ch.body || '';
+            (ch.memos || []).forEach((m, mi) => { files[`話/${cid}/memo_${mi + 1}.txt`] = m.content || ''; });
+        });
+        (state.globalMemos || []).forEach((m, i) => { files[`メモ/global_${i + 1}.txt`] = m.content || ''; });
+        Object.entries(state.folderMemos || {}).forEach(([fid, bundle]) => (bundle.memos || []).forEach((m, i) => { files[`メモ/folder_${fid}_${i + 1}.txt`] = m.content || ''; }));
+        files['話/ai_chat.txt'] = (aiChatState || []).map((x) => `Q:${x.q || ''}\nA:${x.a || ''}`).join('\n\n----\n\n');
+        return files;
     }
     function updateAIUsage(provider, responseJson) {
         const usage = responseJson?.usage || responseJson?.usageMetadata || null;
@@ -588,10 +665,18 @@
                 if (remoteMeta.metadata?.sha) metaBody.sha = remoteMeta.metadata.sha;
                 const metaUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${CLOUD_PATHS.metadata}`;
                 await requestJson(metaUrl, { method:'PUT', headers, body: JSON.stringify(metaBody) });
+                const txtFiles = buildTextBackupFiles();
+                for (const [path, text] of Object.entries(txtFiles)) {
+                    const fileUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+                    const oldTxt = await requestJson(fileUrl, { headers });
+                    const txtBody = { message: `txt backup ${path}`, content: toBase64FromText(text) };
+                    if (oldTxt.res.status === 200 && oldTxt.body?.sha) txtBody.sha = oldTxt.body.sha;
+                    await requestJson(fileUrl, { method:'PUT', headers, body: JSON.stringify(txtBody) });
+                }
                 await syncAttachmentsToGithub(headers, owner, repo);
                 showToast(`アップロード成功（変更 ${changed} ファイル）`, 'success');
             } else {
-                const hasRemote = ['settings','keys','stories','memos','aiChat'].some((k)=>remote[k]);
+                const hasRemote = ['settings','keys','stories','memos','aiChat','assetsIndex'].some((k)=>remote[k]);
                 if (!hasRemote) return showToast('リモートにデータがありません。先にUPしてください。', 'error');
                 if (!confirm('リモートデータで復元しますか？')) return;
                 await addLocalSnapshot('before-download-local', structuredClone(state));
@@ -890,7 +975,7 @@
     function renderFolderFilter() {
         const sel = document.getElementById('folder-filter');
         if (!sel) return;
-        const options = [`<option value="all">すべてのフォルダー</option>`].concat((state.folders || []).map((f)=>`<option value="${f.id}">${f.name}</option>`));
+        const options = [`<option value="all">すべてのタグ</option>`].concat((state.folders || []).map((f)=>`<option value="${f.id}">${f.name}</option>`));
         sel.innerHTML = options.join('');
         sel.value = state.currentFolderId || 'all';
     }
@@ -899,24 +984,24 @@
         if (!name) return;
         const id = `f_${Date.now().toString(36)}`;
         state.folders.push({id, name});
-        state.folderMemos[id] = { memos:[{name:'フォルダーメモ', content:'', attachments:[]}], currentMemoIdx:0 };
+        state.folderMemos[id] = { memos:[{name:'タグメモ', content:'', attachments:[]}], currentMemoIdx:0 };
         document.getElementById('new-folder-name').value = '';
         state.currentFolderId = id;
         refreshUI(); save();
     }
     function changeFolderFilter(folderId) { state.currentFolderId = folderId || 'all'; refreshUI(); save(); }
     function renameCurrentFolder() {
-        if (!state.currentFolderId || state.currentFolderId === 'all') return showToast('特定フォルダーを選択してください', 'error');
+        if (!state.currentFolderId || state.currentFolderId === 'all') return showToast('特定タグを選択してください', 'error');
         const target = state.folders.find((f)=>f.id===state.currentFolderId);
         if (!target) return;
-        const name = prompt('フォルダー名', target.name);
+        const name = prompt('タグ名', target.name);
         if (!name) return;
         target.name = name.trim();
         refreshUI(); save();
     }
     function getCurrentFolderMemoBundle() {
         const fid = state.currentFolderId && state.currentFolderId !== 'all' ? state.currentFolderId : 'root';
-        if (!state.folderMemos[fid]) state.folderMemos[fid] = { memos:[{name:'フォルダーメモ', content:'', attachments:[]}], currentMemoIdx:0 };
+        if (!state.folderMemos[fid]) state.folderMemos[fid] = { memos:[{name:'タグメモ', content:'', attachments:[]}], currentMemoIdx:0 };
         return state.folderMemos[fid];
     }
     function getCurrentMemoContext() {
@@ -930,11 +1015,12 @@
         }
         return { memos: state.globalMemos, idxKey: 'currentGlobalMemoIdx', owner: state };
     }
-    function renderMemoAttachments() {
+    async function renderMemoAttachments() {
         const box = document.getElementById('memo-attachments');
         if (!box) return;
         const ctx = getCurrentMemoContext();
         const memo = ctx.memos[ctx.owner[ctx.idxKey]];
+        await syncCurrentMemoAttachmentsFromCloud();
         const files = memo?.attachments || [];
         box.innerHTML = files.map((f, i) => `<div class="config-item"><span class="material-icons" style="font-size:16px;">${f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audiotrack' : f.type.startsWith('video/') ? 'movie' : 'description'}</span><span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${f.name}</span><button onclick="previewMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">preview</span></button><button onclick="downloadMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">download</span></button><button onclick="removeMemoAttachment(${i})"><span class="material-icons" style="font-size:16px;">delete</span></button></div>`).join('') || '<div class="config-item">添付なし</div>';
     }
@@ -946,6 +1032,8 @@
         const data = file.type.startsWith('text/') || file.name.endsWith('.txt') ? await file.text() : file;
         const ref = await storeAttachmentBlob(file, data);
         memo.attachments.push(ref);
+        state.assetsIndex = buildAttachmentIndex();
+        try { await uploadAttachmentNow(ref); } catch (e) { console.warn(e); }
         document.getElementById('memo-attach-input').value = '';
         renderMemoAttachments();
         await previewMemoAttachment(memo.attachments.length - 1);
@@ -996,6 +1084,7 @@
         if (!memo?.attachments) return;
         memo.attachments.splice(i, 1);
         if (ref?.id) await dbDelete('attachments', ref.id);
+        state.assetsIndex = buildAttachmentIndex();
         const pane = document.getElementById('memo-attachment-preview');
         if (pane) pane.style.display = 'none';
         renderMemoAttachments(); save();
@@ -1003,7 +1092,7 @@
     function refreshUI() {
         renderFolderFilter();
         const visible = getVisibleChapterIndexes();
-        document.getElementById('chapter-list').innerHTML = visible.map((i) => { const ch = state.chapters[i]; return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}<small style=\"opacity:.6; margin-left:6px;\">[${(state.folders.find(f=>f.id===ch.folderId)||{name:'既定'}).name}]</small></button><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="cycleChapterFolder(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`; }).join('');
+        document.getElementById('chapter-list').innerHTML = visible.map((i) => { const ch = state.chapters[i]; return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}<small style=\"opacity:.6; margin-left:6px;\">[${(state.folders.find(f=>f.id===ch.folderId)||{name:'既定タグ'}).name}]</small></button><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="cycleChapterFolder(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`; }).join('');
         renderDownloadTargets();
         renderList('replace-list', state.replaceRules || [], 'replace');
         renderList('insert-list', state.insertButtons || [], 'insert');
@@ -1508,7 +1597,7 @@ ${scopeText.slice(0, 12000)}
         const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
         selected.forEach((idx, order) => {
             const chapter = state.chapters[idx];
-            const folderName = (state.folders.find((f)=>f.id===chapter.folderId)||{name:'既定'}).name;
+            const folderName = (state.folders.find((f)=>f.id===chapter.folderId)||{name:'既定タグ'}).name;
             const filename = `${stamp}_${String(order + 1).padStart(2, '0')}_${sanitizeFileName(folderName)}_${sanitizeFileName(chapter.title)}.txt`;
             zip.file(filename, createUtf8BytesWithBom(chapter.body || ''));
         });

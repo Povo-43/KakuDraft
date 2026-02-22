@@ -4,19 +4,20 @@
     const STATE_KEY = 'app-state';
     const LEGACY_STORAGE_KEY = 'kaku_v_pro_sync';
     const REPO_DATA_PATH = 'kakudraft_data.json';
+    const REPO_AI_CHAT_PATH = 'kakudraft_ai_chat.json';
+    const AI_CHAT_KEY = 'ai-chat';
     const toastEl = document.getElementById('toast');
     let syncTimer;
     let toastTimer;
     let persistTimer;
-
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js', { scope: './' });
         });
     }
-
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiChat:[] };
-
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat' };
+    let aiChatState = [];
+    let aiBusy = false;
     function showToast(message, type = 'info') {
         if (!toastEl) return;
         toastEl.textContent = message;
@@ -26,19 +27,15 @@
             toastEl.className = '';
         }, 2800);
     }
-
     function closePanels() {
         document.querySelectorAll('.side-panel').forEach(el => el.classList.remove('open'));
     }
-
     function sanitizeFileName(name) {
         return (name || 'untitled').replace(/[\\/:*?"<>|]/g, '_');
     }
-
     function createUtf8TextBlob(text) {
         return new Blob(['﻿', text || ''], { type: 'text/plain;charset=utf-8' });
     }
-
     function createUtf8BytesWithBom(text) {
         const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
         const body = new TextEncoder().encode(text || '');
@@ -47,7 +44,6 @@
         bytes.set(body, bom.length);
         return bytes;
     }
-
     function triggerDownload(blob, filename) {
         const a = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -56,14 +52,12 @@
         a.click();
         URL.revokeObjectURL(url);
     }
-
     function getSelectedChapterIndexes() {
         return state.chapters.map((_, i) => i).filter((i) => {
             const checkbox = document.getElementById(`download-target-${i}`);
             return checkbox && checkbox.checked;
         });
     }
-
     function openDb() {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -77,7 +71,6 @@
             request.onerror = () => reject(request.error);
         });
     }
-
     async function dbGet(storeName, key) {
         const db = await openDb();
         return new Promise((resolve, reject) => {
@@ -87,7 +80,6 @@
             request.onerror = () => reject(request.error);
         });
     }
-
     async function dbPut(storeName, value, key) {
         const db = await openDb();
         return new Promise((resolve, reject) => {
@@ -98,9 +90,6 @@
             request.onerror = () => reject(request.error);
         });
     }
-
-
-
     async function dbDelete(storeName, key) {
         const db = await openDb();
         return new Promise((resolve, reject) => {
@@ -110,13 +99,11 @@
             request.onerror = () => reject(request.error);
         });
     }
-
     async function storeAttachmentBlob(file, data) {
         const id = `att_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;
         await dbPut('attachments', { id, name: file.name, type: file.type || 'application/octet-stream', data, size: file.size || 0, createdAt: Date.now() });
         return { id, name: file.name, type: file.type || 'application/octet-stream', size: file.size || 0, createdAt: Date.now(), storage: 'idb', githubPath: null };
     }
-
     async function getAttachmentData(ref) {
         if (!ref) return null;
         if (!ref.id && typeof ref.data !== 'undefined') return { id: '', name: ref.name, type: ref.type, data: ref.data, size: ref.size || 0 };
@@ -150,13 +137,11 @@
         };
         await dbPut('snapshots', snapshot);
     }
-
     async function deriveTokenKey(deviceName) {
         const secret = `kakudraft-lite-secret::${location.origin}::${deviceName || 'default-device'}`;
         const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));
         return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
     }
-
     async function encryptPatToken(token, deviceName) {
         if (!token || !window.crypto?.subtle) return '';
         const key = await deriveTokenKey(deviceName);
@@ -168,7 +153,6 @@
         };
         return btoa(JSON.stringify(payload));
     }
-
     async function decryptPatToken(payloadB64, deviceName) {
         if (!payloadB64 || !window.crypto?.subtle) return '';
         try {
@@ -184,7 +168,6 @@
             return '';
         }
     }
-
     function parseRepoTarget(rawRepo, fallbackOwner) {
         const cleaned = (rawRepo || '').trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/^\/+|\/+$/g, '');
         if (!cleaned) return null;
@@ -194,14 +177,12 @@
         }
         return fallbackOwner ? { owner: fallbackOwner, repo: cleaned } : null;
     }
-
     async function requestJson(url, options = {}) {
         const res = await fetch(url, options);
         let body;
         try { body = await res.json(); } catch { body = null; }
         return { res, body };
     }
-
     function normalizeStateShape(raw) {
         const next = Object.assign({}, state, raw || {});
         next.chapters = (next.chapters || []).map((ch, idx) => ({
@@ -231,11 +212,40 @@
         next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
         return next;
     }
-
     function getAIKeyInputId(provider) {
         return `ai-api-key-${provider}`;
     }
-
+    function getStateWithoutAIChat() {
+        const clone = structuredClone(state);
+        delete clone.aiChat;
+        return clone;
+    }
+    async function persistAIChatNow() {
+        await dbPut('kv', JSON.stringify(aiChatState || []), AI_CHAT_KEY);
+    }
+    async function loadPersistedAIChat() {
+        const saved = await dbGet('kv', AI_CHAT_KEY);
+        if (!saved) {
+            aiChatState = Array.isArray(state.aiChat) ? state.aiChat.slice(-100) : [];
+            return;
+        }
+        try {
+            const parsed = JSON.parse(saved);
+            aiChatState = Array.isArray(parsed) ? parsed.slice(-100) : [];
+        } catch {
+            aiChatState = [];
+        }
+    }
+    function setAIBusy(nextBusy) {
+        aiBusy = !!nextBusy;
+        const note = document.getElementById('ai-busy-note');
+        if (note) note.style.display = aiBusy ? 'flex' : 'none';
+        ['ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread', 'ai-send-chat', 'ai-send-proofread', 'ai-chat-clear-btn'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = aiBusy || !navigator.onLine;
+        });
+    }
     async function stashAllProviderKeys() {
         state.aiKeysEnc = state.aiKeysEnc || {};
         for (const provider of ['openrouter', 'groq', 'google']) {
@@ -245,22 +255,20 @@
         const activeProvider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
         state.aiKeyEnc = state.aiKeysEnc[activeProvider] || '';
     }
-
     async function getProviderKey(provider) {
         const enc = (state.aiKeysEnc || {})[provider] || '';
         if (enc) return await decryptPatToken(enc, state.deviceName);
         if (provider === (state.aiProvider || 'openrouter') && state.aiKeyEnc) return await decryptPatToken(state.aiKeyEnc, state.deviceName);
         return '';
     }
-
     async function persistNow() {
         const tokenPlain = document.getElementById('gh-token').value || '';
         state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
         state.ghTokenLegacy = '';
         await stashAllProviderKeys();
-        await dbPut('kv', JSON.stringify(state), STATE_KEY);
+        await dbPut('kv', JSON.stringify(getStateWithoutAIChat()), STATE_KEY);
+        await persistAIChatNow();
     }
-
     function queuePersist() {
         clearTimeout(persistTimer);
         persistTimer = setTimeout(async () => {
@@ -272,7 +280,6 @@
             }
         }, 60);
     }
-
     async function loadPersistedState() {
         const saved = await dbGet('kv', STATE_KEY);
         if (saved) {
@@ -284,14 +291,15 @@
         if (legacy) {
             const parsed = JSON.parse(legacy);
             state = normalizeStateShape(parsed);
-            await dbPut('kv', JSON.stringify(state), STATE_KEY);
+            await dbPut('kv', JSON.stringify(getStateWithoutAIChat()), STATE_KEY);
+        await persistAIChatNow();
             localStorage.removeItem(LEGACY_STORAGE_KEY);
             showToast('旧データを新しい保存形式へ移行しました', 'success');
         }
     }
-
     window.onload = async () => {
         await loadPersistedState();
+        await loadPersistedAIChat();
         let token = await decryptPatToken(state.ghTokenEnc, state.deviceName);
         if (!token && state.ghToken) {
             try { token = decodeURIComponent(escape(atob(state.ghToken))); } catch { token = ''; }
@@ -316,10 +324,10 @@
         updateOnlineFontUI();
         if (state.keepScreenOn) toggleWakeLock(true);
         renderAIChatLog();
+        setAIBusy(false);
         switchAITab(state.aiTab || 'chat');
         refreshUI(); loadChapter(state.currentIdx);
     };
-
     function save() {
         state.chapters[state.currentIdx].body = editor.value;
         const targetMemos = state.memoScope === 'local' ? state.chapters[state.currentIdx].memos : state.memoScope === 'folder' ? getCurrentFolderMemoBundle().memos : state.globalMemos;
@@ -334,7 +342,6 @@
         queuePersist();
         updateStats();
     }
-
     async function uploadRepoSnapshot(headers, owner, repo, currentState, reason) {
         const snapshotPath = `kakudraft_snapshots/${new Date().toISOString().replace(/[:.]/g, '-')}_${sanitizeFileName(state.deviceName || 'device')}_${reason}.json`;
         const bytes = new TextEncoder().encode(JSON.stringify(currentState));
@@ -351,8 +358,6 @@
             body: JSON.stringify({ message: `snapshot: ${reason}`, content })
         });
     }
-
-
     async function syncAttachmentsToGithub(headers, owner, repo) {
         const refs = [];
         const collect = (memos) => (memos || []).forEach((m) => (m.attachments || []).forEach((a) => refs.push(a)));
@@ -374,40 +379,32 @@
             ref.githubPath = path;
         }
     }
-
     async function githubSync(mode) {
         save();
-
         const token = document.getElementById('gh-token').value.trim();
         const repoInput = state.ghRepo;
-
         if (!token || !repoInput) {
             showToast('GitHub設定（PAT / リポジトリ）を入力してください', 'error');
             return;
         }
-
         const headers = {
             "Authorization": `Bearer ${token}`,
             "Accept": "application/vnd.github+json",
             "Content-Type": "application/json"
         };
-
         try {
             const userRes = await requestJson("https://api.github.com/user", { headers });
             if (!userRes.res.ok && !repoInput.includes('/')) {
                 throw new Error('ユーザー情報の取得に失敗しました。owner/repo形式で入力してください。');
             }
-
             const fallbackOwner = userRes.body?.login;
             const parsedRepo = parseRepoTarget(repoInput, fallbackOwner);
             if (!parsedRepo) throw new Error('リポジトリ形式が不正です（例: owner/repo または repo）。');
-
             const { owner, repo } = parsedRepo;
             const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_DATA_PATH}`;
-
+            const aiChatApiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${REPO_AI_CHAT_PATH}`;
             let sha = null;
             let remoteData = null;
-
             const getRes = await requestJson(apiUrl, { headers });
             if (getRes.res.status === 200) {
                 sha = getRes.body.sha;
@@ -418,9 +415,21 @@
             } else if (getRes.res.status !== 404) {
                 throw new Error(getRes.body?.message || `取得失敗: ${getRes.res.status}`);
             }
-
+            let aiChatSha = null;
+            let remoteAIChat = null;
+            const getAiRes = await requestJson(aiChatApiUrl, { headers });
+            if (getAiRes.res.status === 200) {
+                aiChatSha = getAiRes.body.sha;
+                const cleaned = getAiRes.body.content.replace(/\n/g, "");
+                const binary = atob(cleaned);
+                const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                const parsedChat = JSON.parse(new TextDecoder().decode(bytes));
+                remoteAIChat = Array.isArray(parsedChat) ? parsedChat.slice(-100) : [];
+            } else if (getAiRes.res.status !== 404) {
+                throw new Error(getAiRes.body?.message || `AI履歴の取得失敗: ${getAiRes.res.status}`);
+            }
             if (mode === "up") {
-                const jsonStr = JSON.stringify(state);
+                const jsonStr = JSON.stringify(getStateWithoutAIChat());
                 const bytes = new TextEncoder().encode(jsonStr);
                 let binary = "";
                 const chunkSize = 0x8000;
@@ -429,35 +438,37 @@
                     binary += String.fromCharCode(...chunk);
                 }
                 const content = btoa(binary);
-
                 const body = { message: `Sync from ${state.deviceName || "Unknown"}`, content };
                 if (sha) body.sha = sha;
-
                 const putRes = await requestJson(apiUrl, { method: "PUT", headers, body: JSON.stringify(body) });
                 if (!putRes.res.ok) throw new Error(putRes.body?.message || "アップロード失敗");
+                const chatStr = JSON.stringify(aiChatState || []);
+                const chatBytes = new TextEncoder().encode(chatStr);
+                let chatBinary = "";
+                const chatChunk = 0x8000;
+                for (let i = 0; i < chatBytes.length; i += chatChunk) chatBinary += String.fromCharCode(...chatBytes.subarray(i, i + chatChunk));
+                const chatBody = { message: `AI chat sync from ${state.deviceName || "Unknown"}`, content: btoa(chatBinary) };
+                if (aiChatSha) chatBody.sha = aiChatSha;
+                const putChatRes = await requestJson(aiChatApiUrl, { method: "PUT", headers, body: JSON.stringify(chatBody) });
+                if (!putChatRes.res.ok) throw new Error(putChatRes.body?.message || "AIチャット履歴アップロード失敗");
                 await syncAttachmentsToGithub(headers, owner, repo);
-
                 showToast('アップロード成功（添付を別フォルダー管理）', 'success');
             } else {
                 if (!remoteData) {
                     showToast('リモートにデータがありません。先にUPしてください。', 'error');
                     return;
                 }
-
                 if (!confirm("リモートデータで復元しますか？")) return;
-
                 await addLocalSnapshot('before-download-local', structuredClone(state));
                 uploadRepoSnapshot(headers, owner, repo, structuredClone(state), 'before-download').catch(() => {});
-
                 const oldTokenEnc = state.ghTokenEnc;
                 const oldRepo = state.ghRepo;
                 const oldDevice = state.deviceName;
-
                 state = normalizeStateShape(remoteData);
+                aiChatState = Array.isArray(remoteAIChat) ? remoteAIChat.slice(-100) : [];
                 state.ghTokenEnc = oldTokenEnc;
                 state.ghRepo = oldRepo;
                 state.deviceName = oldDevice;
-
                 await addLocalSnapshot('after-download-remote', structuredClone(state));
                 await persistNow();
                 showToast('復元完了（ローカル/リポジトリへスナップショット保存）', 'success');
@@ -468,7 +479,6 @@
             showToast(`GitHub同期エラー: ${err.message}`, 'error');
         }
     }
-
     function execReplace() {
         const val = editor.value; const cursor = editor.selectionStart;
         state.replaceRules.forEach(rule => {
@@ -481,7 +491,6 @@
     editor.addEventListener('input', (e) => { if (!e.isComposing) execReplace(); });
     let highlightMirror = null;
     let highlightMarker = null;
-
     function ensureHighlightMirror() {
         if (highlightMirror) return highlightMirror;
         highlightMirror = document.createElement('div');
@@ -499,7 +508,6 @@
         document.getElementById('editor-container').appendChild(highlightMirror);
         return highlightMirror;
     }
-
     function updateHighlight() {
         const style = getComputedStyle(editor);
         const mirror = ensureHighlightMirror();
@@ -510,7 +518,6 @@
         mirror.textContent = editor.value.substring(0, editor.selectionStart);
         highlightMarker.textContent = editor.value.substring(editor.selectionStart, editor.selectionStart + 1) || '　';
         mirror.appendChild(highlightMarker);
-
         const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.7;
         const rawTop = highlightMarker.offsetTop - editor.scrollTop;
         const top = Math.max(0, Math.round(rawTop));
@@ -518,7 +525,6 @@
         hl.style.height = `${lineHeight}px`;
         hl.style.top = `${top}px`;
     }
-
     ['scroll','click','keyup','focus','input'].forEach(ev => editor.addEventListener(ev, updateHighlight));
     function loadChapter(i) { editor.value = state.chapters[i].body; editor.scrollTop = 0; updateStats(); renderMemos(); updateHighlight(); }
     function switchChapter(i) { const idx = Number(i); if (Number.isNaN(idx) || idx < 0 || idx >= state.chapters.length) return; save(); state.currentIdx = idx; refreshUI(); loadChapter(idx); showToast(`「${state.chapters[idx].title}」へ切替`, 'success'); }
@@ -563,7 +569,6 @@
                 <span class="material-icons" style="font-size:16px; cursor:pointer;" onclick="deleteMemo(${i})">close</span>
             </div>
         `).join('');
-
         memoArea.value = m[a] ? m[a].content : "";
         const pane = document.getElementById('memo-attachment-preview'); if (pane) pane.style.display = 'none';
         renderMemoAttachments();
@@ -730,7 +735,6 @@
     }
     window.addEventListener('online', updateOnlineFontUI);
     window.addEventListener('offline', updateOnlineFontUI);
-
     let wakeLockHandle = null;
     async function toggleWakeLock(on) {
         state.keepScreenOn = !!on;
@@ -752,7 +756,6 @@
         }
         queuePersist();
     }
-
     function getVisibleChapterIndexes() {
         const fid = state.currentFolderId || 'all';
         return state.chapters.map((_,i)=>i).filter((i)=> fid === 'all' || state.chapters[i].folderId === fid);
@@ -789,7 +792,6 @@
         if (!state.folderMemos[fid]) state.folderMemos[fid] = { memos:[{name:'フォルダーメモ', content:'', attachments:[]}], currentMemoIdx:0 };
         return state.folderMemos[fid];
     }
-
     function getCurrentMemoContext() {
         if (state.memoScope === 'local') {
             const bundle = state.chapters[state.currentIdx];
@@ -862,7 +864,6 @@
         if (pane) pane.style.display = 'none';
         renderMemoAttachments(); save();
     }
-
     function refreshUI() {
         renderFolderFilter();
         const visible = getVisibleChapterIndexes();
@@ -950,7 +951,6 @@
         const recent = sessions.slice(-14);
         const points = recent.map((s) => `${new Date(s.t).toLocaleDateString().slice(5)}:${s.c}`).join(' / ');
         document.getElementById('session-stats').innerHTML = `<div class="config-item" style="white-space:normal;">最近の文字数推移: ${points || 'データなし'}</div>`;
-
         const cvs = document.getElementById('writing-graph');
         if (cvs) {
             const ctx = cvs.getContext('2d');
@@ -967,12 +967,10 @@
                 ctx.fillRect(i * bw + 2, h - bh - 2, Math.max(2, bw - 4), bh);
             });
         }
-
         const words = extractJapaneseTerms(editor.value);
         const topEntries = Object.entries(words).sort((a, b) => b[1] - a[1]).slice(0, 10);
         const top = topEntries.map(([w, c]) => `${w}(${c})`).join(' / ');
         document.getElementById('top-words').innerHTML = `<div class="config-item" style="white-space:normal;">頻出語（日本語分かち書き）: ${top || 'データなし'}</div>`;
-
         const paragraphCount = editor.value.split(/\n{2,}/).filter(Boolean).length;
         const sentenceCount = (editor.value.match(/[。！？!?]/g) || []).length;
         const avgSentence = sentenceCount ? Math.round(editor.value.replace(/\s/g, '').length / sentenceCount) : 0;
@@ -997,7 +995,6 @@
         fallback.forEach(add);
         return freq;
     }
-
     function getSearchRegex() {
         const q = document.getElementById('search-query').value;
         const regexMode = !!document.getElementById('search-regex')?.checked;
@@ -1075,9 +1072,6 @@
         }
         save(); updateHighlight(); showToast(`${count}件置換しました`, 'success'); collectSearchResults();
     }
-
-
-
     function switchAITab(tab) {
         const mode = tab === 'proofread' ? 'proofread' : 'chat';
         state.aiTab = mode;
@@ -1094,12 +1088,10 @@
         if (proofScope) proofScope.value = scope;
         queuePersist();
     }
-
     function openAISettings() {
         togglePanel('menu-panel');
         switchMenuTab('settings');
     }
-
     async function onAIProviderChange() {
         const nextProvider = document.getElementById('ai-provider')?.value || 'openrouter';
         state.aiProvider = nextProvider;
@@ -1112,9 +1104,9 @@
             el.disabled = offline;
             el.parentElement.style.display = provider === nextProvider ? 'flex' : 'none';
         });
-        ['ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
+        ['ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread', 'ai-send-chat', 'ai-send-proofread', 'ai-chat-clear-btn'].forEach((id) => {
             const el = document.getElementById(id);
-            if (el) el.disabled = offline;
+            if (el) el.disabled = offline || aiBusy;
         });
         queuePersist();
     }
@@ -1127,13 +1119,11 @@
         if (scope === 'all') return state.chapters.map((ch) => `### ${ch.title}\n${ch.body || ''}`).join('\n\n');
         return state.chapters[state.currentIdx]?.body || '';
     }
-
     function getValidAppOrigin() {
         const o = location.origin;
         if (!o || o === 'null' || o === 'file://') return 'https://kakudraft.local';
         return o;
     }
-
     function buildProviderHeaders(provider, key, withJson = true) {
         const headers = {};
         if (withJson) headers['Content-Type'] = 'application/json';
@@ -1148,7 +1138,6 @@
         }
         return headers;
     }
-
     async function fetchAIModels() {
         if (!navigator.onLine) return showToast('オフライン中は利用できません', 'error');
         const provider = document.getElementById('ai-provider').value;
@@ -1188,7 +1177,6 @@
         const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
         const model = document.getElementById('ai-model').value.trim();
         if (!key || !model) throw new Error('APIキーとモデルを設定してください');
-
         let r;
         let j;
         if (provider === 'google') {
@@ -1203,7 +1191,6 @@
             if (!text.trim()) throw new Error('AI応答が空でした。モデル設定や利用制限を確認してください。');
             return text;
         }
-
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
         const body = { model, messages, temperature: 0.4 };
         if (jsonMode) body.response_format = { type: 'json_object' };
@@ -1221,29 +1208,48 @@
         return text;
     }
     async function sendAIChat() {
+        if (aiBusy) return;
+        const promptEl = document.getElementById('ai-prompt');
         try {
-            const prompt = document.getElementById('ai-prompt').value.trim();
+            const prompt = promptEl.value.trim();
             if (!prompt) return showToast('AIへの指示を入力してください', 'error');
+            promptEl.value = '';
+            setAIBusy(true);
             const scopeText = getAIScopeText();
             const ans = await callAI([
                 { role: 'system', content: 'あなたは日本語小説執筆を支援するアシスタントです。簡潔で実用的に答えてください。' },
-                { role: 'user', content: `対象テキスト:\n${scopeText.slice(0, 12000)}\n\n指示:\n${prompt}` }
+                { role: 'user', content: `対象テキスト:
+${scopeText.slice(0, 12000)}
+
+指示:
+${prompt}` }
             ], false);
-            state.aiChat = state.aiChat || [];
-            state.aiChat.push({ q: prompt, a: ans, at: Date.now() });
-            state.aiChat = state.aiChat.slice(-20);
+            aiChatState = aiChatState || [];
+            aiChatState.push({ q: prompt, a: ans, at: Date.now() });
+            aiChatState = aiChatState.slice(-100);
             renderAIChatLog();
             showToast('AIチャット応答を取得しました', 'success');
             save();
-        } catch (e) { showToast(`AIチャット失敗: ${e.message}`, 'error'); }
+        } catch (e) {
+            showToast(`AIチャット失敗: ${e.message}`, 'error');
+        } finally {
+            setAIBusy(false);
+            queuePersist();
+        }
     }
+
     async function runAIProofread() {
+        if (aiBusy) return;
         try {
+            setAIBusy(true);
             const scopeText = getAIScopeText();
             const userPrompt = document.getElementById('ai-proofread-prompt').value.trim() || '誤字脱字・不自然表現・表記揺れを校閲してください';
             const text = await callAI([
                 { role: 'system', content: '出力はJSONのみ。{replacements:[{from,to,reason}]} 形式で返してください。' },
-                { role: 'user', content: `対象:\n${scopeText.slice(0, 12000)}\n\n要件:${userPrompt}` }
+                { role: 'user', content: `対象:
+${scopeText.slice(0, 12000)}
+
+要件:${userPrompt}` }
             ], true);
             let data;
             try { data = JSON.parse(text); } catch { data = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{"replacements":[]}'); }
@@ -1251,12 +1257,19 @@
             state.lastAISuggestions = reps;
             renderAISuggestions();
             showToast(`校閲候補 ${reps.length} 件`, 'success');
-        } catch (e) { showToast(`AI校閲失敗: ${e.message}`, 'error'); }
+        } catch (e) {
+            showToast(`AI校閲失敗: ${e.message}`, 'error');
+        } finally {
+            setAIBusy(false);
+        }
     }
+
     function applyAISuggestion(i) {
         const r = (state.lastAISuggestions || [])[i];
         if (!r) return;
         editor.value = editor.value.split(r.from).join(r.to);
+        state.lastAISuggestions.splice(i, 1);
+        renderAISuggestions();
         save(); updateHighlight(); updateStats();
         showToast(`置換適用: ${r.from} → ${r.to}`, 'success');
     }
@@ -1317,17 +1330,20 @@
         if (inCode) out.push('</code></pre>');
         return out.join('');
     }
+    function clearAIChatHistory() {
+        aiChatState = [];
+        renderAIChatLog();
+        queuePersist();
+        showToast('AIチャット履歴を削除しました', 'success');
+    }
     function renderAIChatLog() {
         const log = document.getElementById('ai-chat-log');
         if (!log) return;
-        log.innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).join('') || '<div class="config-item">会話履歴はありません</div>';
+        log.innerHTML = (aiChatState || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).join('') || '<div class="config-item">会話履歴はありません</div>'; 
         log.scrollTop = log.scrollHeight;
     }
-
     window.addEventListener('online', onAIProviderChange);
     window.addEventListener('offline', onAIProviderChange);
-
-
     async function downloadSelectedZip() {
         save();
         const selected = getSelectedChapterIndexes();
@@ -1335,19 +1351,16 @@
             showToast('ダウンロード対象の話を選択してください。', 'error');
             return;
         }
-
         if (selected.length === 1) {
             const chapter = state.chapters[selected[0]];
             const filename = `${sanitizeFileName(chapter.title)}.txt`;
             triggerDownload(createUtf8TextBlob(chapter.body || ''), filename);
             return;
         }
-
         if (typeof JSZip === 'undefined') {
             showToast('ZIPライブラリの読み込みに失敗しました。通信状態を確認してください。', 'error');
             return;
         }
-
         const zip = new JSZip();
         const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
         selected.forEach((idx, order) => {
@@ -1356,7 +1369,6 @@
             const filename = `${stamp}_${String(order + 1).padStart(2, '0')}_${sanitizeFileName(folderName)}_${sanitizeFileName(chapter.title)}.txt`;
             zip.file(filename, createUtf8BytesWithBom(chapter.body || ''));
         });
-
         const blob = await zip.generateAsync({ type: 'blob' });
         triggerDownload(blob, 'kakudraft_selected.zip');
     }
@@ -1446,7 +1458,6 @@
         }
         save(); updateHighlight(); showToast('ドラッグ&ドロップで貼り付けました', 'success');
     });
-
     document.addEventListener("keydown", async (e) => {
         const isMac = navigator.platform.toUpperCase().includes("MAC");
         const ctrl = isMac ? e.metaKey : e.ctrlKey;

@@ -25,18 +25,18 @@ main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relati
 #line-highlight { position: absolute; left: 0; width: 100%; height: 1.7em; background: var(--hl); pointer-events: none; z-index: 1; transition: top 0.08s; display: none; }
 .side-panel { width: 0; background: var(--panel); border-left: 1px solid var(--border); transition: 0.2s; display: flex; flex-direction: column; overflow: hidden; z-index: 50; }
 .side-panel.open { width: 350px; }
-.panel-content { padding: 20px; flex: 1; overflow-y: auto; box-sizing: border-box; }
+.panel-content { padding: 20px; flex: 1; overflow-y: auto; box-sizing: border-box; -webkit-overflow-scrolling: touch; }
 .config-list { border: 1px solid var(--border); margin-bottom: 10px; font-size: 12px; background: var(--input-bg); min-height: 40px; }
 .config-item { display: flex; border-bottom: 1px solid var(--border); align-items: center; padding: 8px 10px; gap: 8px; color: var(--text); }
 .config-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
-.config-input-group input { flex: 1; min-width: 0; padding: 6px; border: 1px solid var(--border); font-size: 11px; background: var(--input-bg); color: var(--text); }
+.config-input-group input, .config-input-group select, .config-input-group textarea { flex: 1; min-width: 0; padding: 6px; border: 1px solid var(--border); font-size: 11px; background: var(--input-bg); color: var(--text); border-radius: 0; }
 .tab-bar { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
 .tab { padding: 10px 15px; font-size: 11px; cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; }
 .tab.active { background: var(--panel); font-weight: bold; border-bottom: 2px solid var(--text); }
 .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
 .chapter-item { padding: 10px; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
 .chapter-item.active { background: var(--bg); font-weight: bold; }
-button { color: var(--text); background: none; border: none;}
+button { color: var(--text); background: none; border: none; border-radius: 0;}
 footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
 .btn-group { display: flex; overflow-x: auto; }
 footer button { height: 45px; min-width: 45px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -73,9 +73,10 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
 .search-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
 .search-actions { display:grid; grid-template-columns:1fr; gap:6px; margin-top:8px; }
 .search-options { display:flex; gap:10px; align-items:center; margin-top:8px; font-size:11px; }
-.ai-panel-content { display:flex; flex-direction:column; overflow:hidden; }
-.ai-chat-log { flex:1; overflow-y:auto; min-height:0; margin-bottom:6px; }
+.ai-panel-content { display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.ai-chat-log { flex:1; overflow-y:auto; min-height:0; margin-bottom:6px; -webkit-overflow-scrolling: touch; }
 .ai-composer { border-top:1px solid var(--border); padding-top:8px; margin-top:0; background:var(--panel); }
+.ai-scope-row { margin-top: 6px; }
 .md-content { white-space:normal; line-height:1.6; }
 .md-content h1, .md-content h2, .md-content h3, .md-content h4, .md-content h5, .md-content h6 { font-size:1rem; margin:0.6em 0; }
 .md-content ul, .md-content ol { padding-left: 1.2em; margin: 0.4em 0; }
@@ -90,11 +91,12 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
 .compact-actions { grid-template-columns: repeat(4, 1fr); gap: 4px; }
 .icon-only-btn { height: 30px; min-width: 30px; padding: 0; }
 .icon-only-btn .material-icons { font-size: 18px; }
-.ai-inner-tabs { margin-bottom: 8px; border:1px solid var(--border); }
+.ai-inner-tabs { margin: 0 0 8px 0; border-left:1px solid var(--border); border-right:1px solid var(--border); border-top:1px solid var(--border); }
 .ai-inner-tabs .tab { flex:1; text-align:center; }
 .ai-sub-panel { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
 .ai-chat-log .config-item { margin-top: 4px; }
-.ai-chat-input-row { display:flex; gap:6px; align-items:stretch; }
-.ai-chat-input-row .icon-only-btn { width:36px; min-width:36px; height:auto; border:1px solid var(--border); }
+.ai-chat-input-row { display:flex; gap:6px; align-items:flex-end; }
+.ai-chat-input-row .icon-only-btn { width:36px; min-width:36px; height:36px; border:1px solid var(--border); flex:0 0 36px; }
+.ai-send-btn .material-icons { font-size:18px; }
 
-#ai-suggestions { flex:1; overflow-y:auto; min-height:0; }
+#ai-suggestions { flex:1; overflow-y:auto; min-height:0; -webkit-overflow-scrolling: touch; }

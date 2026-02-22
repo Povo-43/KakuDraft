@@ -15,7 +15,7 @@
         });
     }
 
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiModel:'', aiChat:[] };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiChat:[] };
 
     function showToast(message, type = 'info') {
         if (!toastEl) return;
@@ -226,15 +226,31 @@
         next.chapters.forEach((ch) => {
             if (!next.folders.some((f) => f.id === ch.folderId)) ch.folderId = 'root';
         });
+        next.aiKeysEnc = (next.aiKeysEnc && typeof next.aiKeysEnc === 'object') ? next.aiKeysEnc : {};
+        if (next.aiKeyEnc && !next.aiKeysEnc[next.aiProvider || 'openrouter']) next.aiKeysEnc[next.aiProvider || 'openrouter'] = next.aiKeyEnc;
         return next;
+    }
+
+    async function stashCurrentProviderKey() {
+        const provider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
+        const aiKeyPlain = document.getElementById('ai-api-key')?.value || '';
+        state.aiKeysEnc = state.aiKeysEnc || {};
+        state.aiKeysEnc[provider] = await encryptPatToken(aiKeyPlain, state.deviceName);
+        state.aiKeyEnc = state.aiKeysEnc[provider] || '';
+    }
+
+    async function getProviderKey(provider) {
+        const enc = (state.aiKeysEnc || {})[provider] || '';
+        if (enc) return await decryptPatToken(enc, state.deviceName);
+        if (provider === (state.aiProvider || 'openrouter') && state.aiKeyEnc) return await decryptPatToken(state.aiKeyEnc, state.deviceName);
+        return '';
     }
 
     async function persistNow() {
         const tokenPlain = document.getElementById('gh-token').value || '';
         state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
         state.ghTokenLegacy = '';
-        const aiKeyPlain = document.getElementById('ai-api-key')?.value || '';
-        state.aiKeyEnc = await encryptPatToken(aiKeyPlain, state.deviceName);
+        await stashCurrentProviderKey();
         await dbPut('kv', JSON.stringify(state), STATE_KEY);
     }
 
@@ -274,10 +290,10 @@
             try { token = decodeURIComponent(escape(atob(state.ghToken))); } catch { token = ''; }
         }
         document.getElementById('gh-token').value = token;
-        const aiKey = await decryptPatToken(state.aiKeyEnc, state.deviceName);
-        document.getElementById('ai-api-key').value = aiKey || '';
         document.getElementById('ai-provider').value = state.aiProvider || 'openrouter';
-        onAIProviderChange();
+        const aiKey = await getProviderKey(state.aiProvider || 'openrouter');
+        document.getElementById('ai-api-key').value = aiKey || '';
+        await onAIProviderChange();
         if (state.aiModel) document.getElementById('ai-model').innerHTML = `<option value=\"${state.aiModel}\">${state.aiModel}</option>`;
         document.getElementById('gh-repo').value = state.ghRepo || "";
         document.getElementById('device-name').value = state.deviceName || "";
@@ -806,17 +822,23 @@
         pane.style.display = 'block';
         if ((ref.type || '').startsWith('image/')) {
             const url = URL.createObjectURL(stored.data);
-            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><img class="attachment-preview-media" src="${url}"></div>`;
+            pane.innerHTML = `<div class="config-item" style="display:block;"><div style="display:flex;justify-content:space-between;align-items:center;"><strong>${ref.name}</strong><button onclick="closeMemoAttachmentPreview()"><span class="material-icons" style="font-size:16px;">close</span></button></div><img class="attachment-preview-media" src="${url}"></div>`;
         } else if ((ref.type || '').startsWith('audio/')) {
             const url = URL.createObjectURL(stored.data);
-            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><audio class="attachment-preview-media" controls src="${url}"></audio></div>`;
+            pane.innerHTML = `<div class="config-item" style="display:block;"><div style="display:flex;justify-content:space-between;align-items:center;"><strong>${ref.name}</strong><button onclick="closeMemoAttachmentPreview()"><span class="material-icons" style="font-size:16px;">close</span></button></div><audio class="attachment-preview-media" controls src="${url}"></audio></div>`;
         } else if ((ref.type || '').startsWith('video/')) {
             const url = URL.createObjectURL(stored.data);
-            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><video class="attachment-preview-media" controls src="${url}"></video></div>`;
+            pane.innerHTML = `<div class="config-item" style="display:block;"><div style="display:flex;justify-content:space-between;align-items:center;"><strong>${ref.name}</strong><button onclick="closeMemoAttachmentPreview()"><span class="material-icons" style="font-size:16px;">close</span></button></div><video class="attachment-preview-media" controls src="${url}"></video></div>`;
         } else {
             const text = typeof stored.data === 'string' ? stored.data : await stored.data.text();
-            pane.innerHTML = `<div class="config-item" style="display:block;"><strong>${ref.name}</strong><pre class="preview-text">${(text || '').replace(/[&<>]/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]))}</pre></div>`;
+            pane.innerHTML = `<div class="config-item" style="display:block;"><div style="display:flex;justify-content:space-between;align-items:center;"><strong>${ref.name}</strong><button onclick="closeMemoAttachmentPreview()"><span class="material-icons" style="font-size:16px;">close</span></button></div><pre class="preview-text">${(text || '').replace(/[&<>]/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]))}</pre></div>`;
         }
+    }
+    function closeMemoAttachmentPreview() {
+        const pane = document.getElementById('memo-attachment-preview');
+        if (!pane) return;
+        pane.style.display = 'none';
+        pane.innerHTML = '';
     }
     async function removeMemoAttachment(i) {
         const ctx = getCurrentMemoContext();
@@ -993,16 +1015,11 @@
         document.getElementById('search-summary').innerHTML = `<div class="config-item">検索ヒット: ${hits.length} 件${all ? '（全話）' : '（現在話）'}</div>`;
         return hits;
     }
-    function toggleSearchPanel(forceOpen = false) {
+    function toggleSearchPanel(forceOpen = false, forceClose = false) {
         const p = document.getElementById('search-panel');
-        p.style.display = (forceOpen || p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+        if (forceClose) p.style.display = 'none';
+        else p.style.display = (forceOpen || p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
         if (p.style.display === 'block') {
-            if (!document.getElementById('search-regex')) {
-                const row = document.createElement('div');
-                row.style.display = 'flex'; row.style.gap='8px'; row.style.marginTop='6px';
-                row.innerHTML = `<label style="font-size:11px;"><input id="search-regex" type="checkbox"> 正規表現</label><label style="font-size:11px;"><input id="search-all-chapters" type="checkbox"> 全話横断</label><button class="sys-btn" style="margin:0;height:28px;" onclick="collectSearchResults()">件数更新</button>`;
-                p.appendChild(row);
-            }
             document.getElementById('search-query').focus();
             collectSearchResults();
         }
@@ -1054,9 +1071,16 @@
         switchMenuTab('settings');
     }
 
-    function onAIProviderChange() {
-        const provider = document.getElementById('ai-provider')?.value || 'openrouter';
-        state.aiProvider = provider;
+    async function onAIProviderChange() {
+        const nextProvider = document.getElementById('ai-provider')?.value || 'openrouter';
+        const prevProvider = state.aiProvider || nextProvider;
+        if (document.getElementById('ai-api-key')) {
+            state.aiKeysEnc = state.aiKeysEnc || {};
+            state.aiKeysEnc[prevProvider] = await encryptPatToken(document.getElementById('ai-api-key').value || '', state.deviceName);
+        }
+        state.aiProvider = nextProvider;
+        const nextKey = await getProviderKey(nextProvider);
+        if (document.getElementById('ai-api-key')) document.getElementById('ai-api-key').value = nextKey || '';
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
@@ -1161,7 +1185,7 @@
             try { data = JSON.parse(text); } catch { data = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{"replacements":[]}'); }
             const reps = data.replacements || [];
             state.lastAISuggestions = reps;
-            document.getElementById('ai-suggestions').innerHTML = reps.map((r, i) => `<div class="config-item" style="align-items:flex-start;"><div style="flex:1;"><div><strong>${r.from}</strong> → <strong>${r.to}</strong></div><div style="font-size:11px;opacity:.8;">${r.reason || ''}</div></div><button onclick="applyAISuggestion(${i})"><span class="material-icons" style="font-size:16px;">published_with_changes</span></button></div>`).join('') || '<div class="config-item">候補なし</div>';
+            renderAISuggestions();
             showToast(`校閲候補 ${reps.length} 件`, 'success');
         } catch (e) { showToast(`AI校閲失敗: ${e.message}`, 'error'); }
     }
@@ -1172,8 +1196,65 @@
         save(); updateHighlight(); updateStats();
         showToast(`置換適用: ${r.from} → ${r.to}`, 'success');
     }
+    function ignoreAISuggestion(i) {
+        if (!state.lastAISuggestions) return;
+        state.lastAISuggestions.splice(i, 1);
+        renderAISuggestions();
+        showToast('この置き換えを無視しました', 'success');
+    }
+    function renderAISuggestions() {
+        const reps = state.lastAISuggestions || [];
+        document.getElementById('ai-suggestions').innerHTML = reps.map((r, i) => `<div class="config-item" style="align-items:flex-start;"><div style="flex:1;"><div><strong>${escapeHtml(r.from || '')}</strong> → <strong>${escapeHtml(r.to || '')}</strong></div><div style="font-size:11px;opacity:.8;">${escapeHtml(r.reason || '')}</div></div><button onclick="applyAISuggestion(${i})" title="適用"><span class="material-icons" style="font-size:16px;">published_with_changes</span></button><button onclick="ignoreAISuggestion(${i})" title="この置き換えは無視"><span class="material-icons" style="font-size:16px;">block</span></button></div>`).join('') || '<div class="config-item">候補なし</div>';
+    }
+    function escapeHtml(text) {
+        return (text || '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function renderMarkdown(text) {
+        const src = String(text || '').replace(/\r\n/g, '\n');
+        const lines = src.split('\n');
+        const out = [];
+        let inUl = false; let inOl = false; let inCode = false;
+        const flush = () => { if (inUl) { out.push('</ul>'); inUl = false; } if (inOl) { out.push('</ol>'); inOl = false; } };
+        const inline = (v) => escapeHtml(v)
+            .replace(/`([^`]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+            .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+        for (const line of lines) {
+            if (line.trim().startsWith('```')) {
+                flush();
+                out.push(inCode ? '</code></pre>' : '<pre><code>');
+                inCode = !inCode;
+                continue;
+            }
+            if (inCode) {
+                out.push(escapeHtml(line) + '\n');
+                continue;
+            }
+            let m;
+            if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
+                if (!inUl) { flush(); out.push('<ul>'); inUl = true; }
+                out.push(`<li>${inline(m[1])}</li>`);
+                continue;
+            }
+            if ((m = line.match(/^\s*\d+\.\s+(.*)$/))) {
+                if (!inOl) { flush(); out.push('<ol>'); inOl = true; }
+                out.push(`<li>${inline(m[1])}</li>`);
+                continue;
+            }
+            flush();
+            if ((m = line.match(/^\s*#+\s+(.*)$/))) {
+                out.push(`<h3>${inline(m[1])}</h3>`);
+                continue;
+            }
+            if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+        }
+        flush();
+        if (inCode) out.push('</code></pre>');
+        return out.join('');
+    }
     function renderAIChatLog() {
-        document.getElementById('ai-chat-log').innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="white-space:normal;display:block;"><div><strong>あなた:</strong> ${x.q}</div><div><strong>AI:</strong> ${x.a.replace(/\n/g, '<br>')}</div></div>`).reverse().join('') || '<div class="config-item">会話履歴はありません</div>';
+        document.getElementById('ai-chat-log').innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).reverse().join('') || '<div class="config-item">会話履歴はありません</div>';
     }
 
     window.addEventListener('online', onAIProviderChange);
@@ -1259,6 +1340,17 @@
     memoArea.oninput = save;
     memoArea.addEventListener('dragover', (e)=>e.preventDefault());
     memoArea.addEventListener('drop', async (e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) await attachMemoFile(f); });
+    function bindEnterShortcut(el, action) {
+        if (!el) return;
+        el.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            e.preventDefault();
+            action();
+        });
+    }
+    bindEnterShortcut(document.getElementById('ai-prompt'), sendAIChat);
+    bindEnterShortcut(document.getElementById('search-query'), findNext);
+    bindEnterShortcut(document.getElementById('replace-query'), findNext);
     editor.addEventListener('pointerdown', closePanels);
     editor.addEventListener('dragover', (e) => { e.preventDefault(); });
     editor.addEventListener('drop', async (e) => {

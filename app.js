@@ -15,7 +15,7 @@
         });
     }
 
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiChat:[] };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'フォルダーメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiChat:[] };
 
     function showToast(message, type = 'info') {
         if (!toastEl) return;
@@ -228,6 +228,7 @@
         });
         next.aiKeysEnc = (next.aiKeysEnc && typeof next.aiKeysEnc === 'object') ? next.aiKeysEnc : {};
         if (next.aiKeyEnc && !next.aiKeysEnc[next.aiProvider || 'openrouter']) next.aiKeysEnc[next.aiProvider || 'openrouter'] = next.aiKeyEnc;
+        next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
         return next;
     }
 
@@ -306,6 +307,7 @@
         updateOnlineFontUI();
         if (state.keepScreenOn) toggleWakeLock(true);
         renderAIChatLog();
+        switchAITab(state.aiTab || 'chat');
         refreshUI(); loadChapter(state.currentIdx);
     };
 
@@ -1066,6 +1068,21 @@
     }
 
 
+
+    function switchAITab(tab) {
+        const mode = tab === 'proofread' ? 'proofread' : 'chat';
+        state.aiTab = mode;
+        const chatTab = document.getElementById('ai-tab-chat');
+        const proofTab = document.getElementById('ai-tab-proofread');
+        const chatPanel = document.getElementById('ai-panel-chat');
+        const proofPanel = document.getElementById('ai-panel-proofread');
+        if (chatTab) chatTab.classList.toggle('active', mode === 'chat');
+        if (proofTab) proofTab.classList.toggle('active', mode === 'proofread');
+        if (chatPanel) chatPanel.style.display = mode === 'chat' ? 'flex' : 'none';
+        if (proofPanel) proofPanel.style.display = mode === 'proofread' ? 'flex' : 'none';
+        queuePersist();
+    }
+
     function openAISettings() {
         togglePanel('menu-panel');
         switchMenuTab('settings');
@@ -1084,7 +1101,7 @@
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
-        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-scope'].forEach((id) => {
+        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline;
         });
@@ -1135,26 +1152,35 @@
         const model = document.getElementById('ai-model').value.trim();
         if (!key || !model) throw new Error('APIキーとモデルを設定してください');
 
+        let r;
+        let j;
         if (provider === 'google') {
             const prompt = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
             const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-            const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
             });
-            const j = await r.json();
-            return j.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            j = await r.json();
+            if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
+            const text = j.candidates?.[0]?.content?.parts?.map((p)=>p.text || '').join('') || '';
+            if (!text.trim()) throw new Error('AI応答が空でした。モデル設定や利用制限を確認してください。');
+            return text;
         }
 
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
         const body = { model, messages, temperature: 0.4 };
         if (jsonMode) body.response_format = { type: 'json_object' };
-        const r = await fetch(base, {
+        r = await fetch(base, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
             body: JSON.stringify(body)
         });
-        const j = await r.json();
-        return j.choices?.[0]?.message?.content || '';
+        j = await r.json();
+        if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
+        const content = j.choices?.[0]?.message?.content;
+        const text = typeof content === 'string' ? content : Array.isArray(content) ? content.map((p)=>p.text || '').join('') : '';
+        if (!text.trim()) throw new Error('AI応答が空でした。モデル設定や利用制限を確認してください。');
+        return text;
     }
     async function sendAIChat() {
         try {
@@ -1176,7 +1202,7 @@
     async function runAIProofread() {
         try {
             const scopeText = getAIScopeText();
-            const userPrompt = document.getElementById('ai-prompt').value.trim() || '誤字脱字・不自然表現・表記揺れを校閲してください';
+            const userPrompt = document.getElementById('ai-proofread-prompt').value.trim() || '誤字脱字・不自然表現・表記揺れを校閲してください';
             const text = await callAI([
                 { role: 'system', content: '出力はJSONのみ。{replacements:[{from,to,reason}]} 形式で返してください。' },
                 { role: 'user', content: `対象:\n${scopeText.slice(0, 12000)}\n\n要件:${userPrompt}` }
@@ -1254,7 +1280,10 @@
         return out.join('');
     }
     function renderAIChatLog() {
-        document.getElementById('ai-chat-log').innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).reverse().join('') || '<div class="config-item">会話履歴はありません</div>';
+        const log = document.getElementById('ai-chat-log');
+        if (!log) return;
+        log.innerHTML = (state.aiChat || []).map((x) => `<div class="config-item" style="display:block;"><div><strong>あなた:</strong></div><div class="md-content">${renderMarkdown(x.q || '')}</div><div><strong>AI:</strong></div><div class="md-content">${renderMarkdown(x.a || '')}</div></div>`).join('') || '<div class="config-item">会話履歴はありません</div>';
+        log.scrollTop = log.scrollHeight;
     }
 
     window.addEventListener('online', onAIProviderChange);
@@ -1349,6 +1378,7 @@
         });
     }
     bindEnterShortcut(document.getElementById('ai-prompt'), sendAIChat);
+    bindEnterShortcut(document.getElementById('ai-proofread-prompt'), runAIProofread);
     bindEnterShortcut(document.getElementById('search-query'), findNext);
     bindEnterShortcut(document.getElementById('replace-query'), findNext);
     editor.addEventListener('pointerdown', closePanels);

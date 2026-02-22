@@ -232,12 +232,18 @@
         return next;
     }
 
-    async function stashCurrentProviderKey() {
-        const provider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
-        const aiKeyPlain = document.getElementById('ai-api-key')?.value || '';
+    function getAIKeyInputId(provider) {
+        return `ai-api-key-${provider}`;
+    }
+
+    async function stashAllProviderKeys() {
         state.aiKeysEnc = state.aiKeysEnc || {};
-        state.aiKeysEnc[provider] = await encryptPatToken(aiKeyPlain, state.deviceName);
-        state.aiKeyEnc = state.aiKeysEnc[provider] || '';
+        for (const provider of ['openrouter', 'groq', 'google']) {
+            const aiKeyPlain = document.getElementById(getAIKeyInputId(provider))?.value || '';
+            state.aiKeysEnc[provider] = await encryptPatToken(aiKeyPlain, state.deviceName);
+        }
+        const activeProvider = state.aiProvider || document.getElementById('ai-provider')?.value || 'openrouter';
+        state.aiKeyEnc = state.aiKeysEnc[activeProvider] || '';
     }
 
     async function getProviderKey(provider) {
@@ -251,7 +257,7 @@
         const tokenPlain = document.getElementById('gh-token').value || '';
         state.ghTokenEnc = await encryptPatToken(tokenPlain, state.deviceName);
         state.ghTokenLegacy = '';
-        await stashCurrentProviderKey();
+        await stashAllProviderKeys();
         await dbPut('kv', JSON.stringify(state), STATE_KEY);
     }
 
@@ -292,8 +298,11 @@
         }
         document.getElementById('gh-token').value = token;
         document.getElementById('ai-provider').value = state.aiProvider || 'openrouter';
-        const aiKey = await getProviderKey(state.aiProvider || 'openrouter');
-        document.getElementById('ai-api-key').value = aiKey || '';
+        for (const provider of ['openrouter', 'groq', 'google']) {
+            const aiKey = await getProviderKey(provider);
+            const el = document.getElementById(getAIKeyInputId(provider));
+            if (el) el.value = aiKey || '';
+        }
         await onAIProviderChange();
         if (state.aiModel) document.getElementById('ai-model').innerHTML = `<option value=\"${state.aiModel}\">${state.aiModel}</option>`;
         document.getElementById('gh-repo').value = state.ghRepo || "";
@@ -1093,18 +1102,17 @@
 
     async function onAIProviderChange() {
         const nextProvider = document.getElementById('ai-provider')?.value || 'openrouter';
-        const prevProvider = state.aiProvider || nextProvider;
-        if (document.getElementById('ai-api-key')) {
-            state.aiKeysEnc = state.aiKeysEnc || {};
-            state.aiKeysEnc[prevProvider] = await encryptPatToken(document.getElementById('ai-api-key').value || '', state.deviceName);
-        }
         state.aiProvider = nextProvider;
-        const nextKey = await getProviderKey(nextProvider);
-        if (document.getElementById('ai-api-key')) document.getElementById('ai-api-key').value = nextKey || '';
         const offline = !navigator.onLine;
         const note = document.getElementById('ai-offline-note');
         if (note) note.style.display = offline ? 'flex' : 'none';
-        ['ai-api-key', 'ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
+        ['openrouter', 'groq', 'google'].forEach((provider) => {
+            const el = document.getElementById(getAIKeyInputId(provider));
+            if (!el) return;
+            el.disabled = offline;
+            el.parentElement.style.display = provider === nextProvider ? 'flex' : 'none';
+        });
+        ['ai-model', 'ai-prompt', 'ai-proofread-prompt', 'ai-scope', 'ai-scope-proofread'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = offline;
         });
@@ -1119,29 +1127,49 @@
         if (scope === 'all') return state.chapters.map((ch) => `### ${ch.title}\n${ch.body || ''}`).join('\n\n');
         return state.chapters[state.currentIdx]?.body || '';
     }
+
+    function getValidAppOrigin() {
+        const o = location.origin;
+        if (!o || o === 'null' || o === 'file://') return 'https://kakudraft.local';
+        return o;
+    }
+
+    function buildProviderHeaders(provider, key, withJson = true) {
+        const headers = {};
+        if (withJson) headers['Content-Type'] = 'application/json';
+        if (provider === 'google') {
+            headers['x-goog-api-key'] = key;
+            return headers;
+        }
+        headers.Authorization = `Bearer ${key}`;
+        if (provider === 'openrouter') {
+            headers['HTTP-Referer'] = getValidAppOrigin();
+            headers['X-Title'] = 'KakuDraft';
+        }
+        return headers;
+    }
+
     async function fetchAIModels() {
         if (!navigator.onLine) return showToast('オフライン中は利用できません', 'error');
         const provider = document.getElementById('ai-provider').value;
-        const key = document.getElementById('ai-api-key').value.trim();
+        const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
         if (!key) return showToast('AI API Keyを入力してください', 'error');
         try {
             let models = [];
             if (provider === 'openrouter') {
                 const r = await fetch('https://openrouter.ai/api/v1/models', {
-                    headers: {
-                        Authorization: `Bearer ${key}`,
-                        'HTTP-Referer': location.origin || 'https://kakudraft.local',
-                        'X-Title': 'KakuDraft'
-                    }
+                    headers: buildProviderHeaders('openrouter', key, false)
                 });
                 const j = await r.json();
                 models = (j.data || []).map((m) => m.id);
             } else if (provider === 'groq') {
-                const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { Authorization: `Bearer ${key}` } });
+                const r = await fetch('https://api.groq.com/openai/v1/models', { headers: buildProviderHeaders('groq', key, false) });
                 const j = await r.json();
                 models = (j.data || []).map((m) => m.id);
             } else {
-                const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
+                const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+                    headers: buildProviderHeaders('google', key, false)
+                });
                 const j = await r.json();
                 models = (j.models || []).map((m) => m.name.replace('models/', ''));
             }
@@ -1157,7 +1185,7 @@
     async function callAI(messages, jsonMode = false) {
         if (!navigator.onLine) throw new Error('オフライン中です');
         const provider = document.getElementById('ai-provider').value;
-        const key = document.getElementById('ai-api-key').value.trim();
+        const key = document.getElementById(getAIKeyInputId(provider))?.value.trim() || '';
         const model = document.getElementById('ai-model').value.trim();
         if (!key || !model) throw new Error('APIキーとモデルを設定してください');
 
@@ -1166,8 +1194,8 @@
         if (provider === 'google') {
             const prompt = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
             const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }] };
-            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+            r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+                method: 'POST', headers: buildProviderHeaders('google', key), body: JSON.stringify(body)
             });
             j = await r.json();
             if (!r.ok) throw new Error(j?.error?.message || `HTTP ${r.status}`);
@@ -1179,11 +1207,7 @@
         const base = provider === 'openrouter' ? 'https://openrouter.ai/api/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
         const body = { model, messages, temperature: 0.4 };
         if (jsonMode) body.response_format = { type: 'json_object' };
-        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
-        if (provider === 'openrouter') {
-            headers['HTTP-Referer'] = location.origin || 'https://kakudraft.local';
-            headers['X-Title'] = 'KakuDraft';
-        }
+        const headers = buildProviderHeaders(provider, key);
         r = await fetch(base, {
             method: 'POST',
             headers,
@@ -1404,6 +1428,9 @@
         const scope = document.getElementById('ai-scope');
         if (scope) scope.value = e.target.value;
         save();
+    });
+    ['openrouter', 'groq', 'google'].forEach((provider) => {
+        document.getElementById(getAIKeyInputId(provider))?.addEventListener('input', queuePersist);
     });
     editor.addEventListener('pointerdown', closePanels);
     editor.addEventListener('dragover', (e) => { e.preventDefault(); });

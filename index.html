@@ -20,7 +20,7 @@
     <div id="memo-panel" class="side-panel">
         <div class="scope-switch">
             <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話</span>
-            <span id="scope-folder" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('folder')">● フォルダー</span><span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
+            <span id="scope-folder" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('folder')">● タグ</span><span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div class="memo-add-row"><input type="text" id="new-memo-name" placeholder="＋メモ名" class="input-plain"><button onclick="addMemoTab()" class="icon-btn"><span class="material-icons">add</span></button></div>
@@ -34,6 +34,7 @@
                 <div class="tab active" data-tab="favorites" onclick="switchMenuTab('favorites')">お気に入り</div>
                 <div class="tab" data-tab="chapters" onclick="switchMenuTab('chapters')">話管理</div>
                 <div class="tab" data-tab="settings" onclick="switchMenuTab('settings')">設定</div>
+                <div class="tab" data-tab="ai" onclick="switchMenuTab('ai')">AI</div>
                 <div class="tab" data-tab="backup" onclick="switchMenuTab('backup')">バックアップ</div>
                 <div class="tab" data-tab="analytics" onclick="switchMenuTab('analytics')">統計</div>
             </div>
@@ -51,8 +52,8 @@
 
             <div class="menu-tab-panel" id="menu-tab-chapters" style="display:none;">
                 <h4>話の管理 <span class="material-icons" style="cursor:pointer;" onclick="addChapter()">add</span></h4>
-                <div class="config-input-group"><input id="new-folder-name" placeholder="新規フォルダー"><button onclick="addFolder()" style="border:1px solid var(--border);">+</button></div>
-                <div class="config-input-group"><select id="folder-filter" onchange="changeFolderFilter(this.value)" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></select><button onclick="renameCurrentFolder()" style="border:1px solid var(--border);">フォルダー名変更</button></div>
+                <div class="config-input-group"><input id="new-folder-name" placeholder="新規タグ"><button onclick="addFolder()" style="border:1px solid var(--border);">+</button></div>
+                <div class="config-input-group"><select id="folder-filter" onchange="changeFolderFilter(this.value)" style="flex:1; border:1px solid var(--border); background:var(--input-bg); color:var(--text);"></select><button onclick="renameCurrentFolder()" style="border:1px solid var(--border);">タグ名変更</button></div>
                 <div id="chapter-list" class="chapter-list"></div>
                 <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="splitChapter()">分割</button><button class="sys-btn" onclick="mergeChapter()">統合</button></div>
                 <h4>ダウンロード</h4>
@@ -76,6 +77,11 @@
                 <h4>表示設定</h4>
                 <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div><label class="config-item" style="cursor:pointer;"><input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock(this.checked)"><span>画面消灯を防止</span></label>
 
+<label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+            </div>
+
+            <div class="menu-tab-panel" id="menu-tab-ai" style="display:none;">
                 <h4>AI設定</h4>
                 <div class="config-input-group">
                     <select id="ai-provider" class="field" onchange="onAIProviderChange()">
@@ -90,8 +96,8 @@
                 <div class="config-input-group"><button class="sys-btn" style="margin:0;" onclick="fetchAIModels()"><span class="material-icons">refresh</span> モデル取得</button></div>
                 <div class="config-input-group"><select id="ai-model" class="field"></select></div>
                 <label id="ai-free-only-row" class="config-item" style="cursor:pointer;"><input id="ai-free-only" type="checkbox"><span>無料モデルのみ（OpenRouterのみ）</span></label>
-<label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
-                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+                <h4>AI使用量（取得できた分）</h4>
+                <div id="ai-usage" class="config-list"></div>
             </div>
 
             <div class="menu-tab-panel" id="menu-tab-backup" style="display:none;">
@@ -130,14 +136,14 @@
                 <div id="ai-chat-log" class="config-list ai-chat-log"></div>
                 <div class="ai-composer">
                     <div class="ai-chat-input-row"><textarea id="ai-prompt" placeholder="AIへの指示（質問・要約・リライト依頼など）" class="field" style="min-height:80px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="送信" id="ai-send-chat" onclick="sendAIChat()"><span class="material-icons">send</span></button></div>
-                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope" class="field"><option value="chapter">現在話</option><option value="folder">現在タグ</option><option value="all">全話</option></select></div>
                 </div>
             </div>
             <div id="ai-panel-proofread" class="ai-sub-panel" style="display:none;">
                 <div id="ai-suggestions" class="config-list" style="margin-top:8px;"></div>
                 <div class="ai-composer">
                     <div class="ai-chat-input-row"><textarea id="ai-proofread-prompt" placeholder="校閲の要望（未入力なら標準ルール）" class="field" style="min-height:88px;"></textarea><button class="sys-btn icon-only-btn ai-send-btn" style="margin:0;" title="校閲実行" id="ai-send-proofread" onclick="runAIProofread()"><span class="material-icons">spellcheck</span></button></div>
-                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在フォルダー</option><option value="all">全話</option></select></div>
+                    <div class="config-input-group ai-scope-row" style="margin-bottom:0;"><select id="ai-scope-proofread" class="field" onchange="document.getElementById('ai-scope').value=this.value"><option value="chapter">現在話</option><option value="folder">現在タグ</option><option value="all">全話</option></select></div>
                 </div>
             </div>
         </div>

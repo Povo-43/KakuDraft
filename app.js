@@ -15,7 +15,7 @@
             navigator.serviceWorker.register('./sw.js', { scope: './' });
         });
     }
-    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定タグ'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false, aiUsage:{}, syncMeta:{}, assetsIndex:{items:[]} };
+    let state = { chapters: [{ title: "第一話", body: "", memos: [{name: "メモ", content: "", attachments: []}], currentMemoIdx: 0, snapshots: [], tags: ['root'] }], currentIdx: 0, globalMemos: [{name: "共通設定", content: "", attachments: []}], currentGlobalMemoIdx: 0, memoScope: 'local', replaceRules: [{from: "!!", to: "！！"}], insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}], fontSize: 18, theme: "light", ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "", menuTab: 'favorites', favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'], fontFamily: "'Sawarabi Mincho', serif", writingSessions: [], folders:[{id:'root',name:'既定タグ'}], currentFolderId:'all', folderMemos:{root:{memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0}}, favoriteEditMode:false, keepScreenOn:false, aiProvider:'openrouter', aiKeyEnc:'', aiKeysEnc:{}, aiModel:'', aiTab:'chat', aiFreeOnly:false, aiUsage:{}, syncMeta:{}, assetsIndex:{items:[]} };
     let aiChatState = [];
     let aiBusy = false;
     let aiThinkingDots = 1;
@@ -187,15 +187,40 @@
     }
     function normalizeStateShape(raw) {
         const next = Object.assign({}, state, raw || {});
-        next.chapters = (next.chapters || []).map((ch, idx) => ({
-            title: ch.title || `第${idx + 1}話`,
-            body: ch.body || '',
-            memos: (ch.memos && ch.memos.length ? ch.memos : [{name:'メモ', content:''}]).map((m)=>({name:m.name||'メモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))})),
-            currentMemoIdx: Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0,
-            snapshots: ch.snapshots || [],
-            folderId: ch.folderId || 'root'
-        }));
-        if (!next.chapters.length) next.chapters = [{title:'第一話', body:'', memos:[{name:'メモ', content:''}], currentMemoIdx:0, snapshots:[], folderId:'root'}];
+        next.chapters = (next.chapters || []).map((ch, idx) => {
+            // タグ配列を初期化・マイグレーション
+            let tags = ch.tags;
+            if (!Array.isArray(tags)) {
+                tags = [];
+                // 旧形式 (folderId) から新形式 (tags) へマイグレーション
+                if (ch.folderId && ch.folderId !== 'root' && ch.folderId !== 'all') {
+                    tags = [ch.folderId];
+                } else {
+                    tags = ['root'];
+                }
+            }
+            // tags が空の場合はデフォルト設定
+            if (!tags.length) {
+                tags = ['root'];
+            }
+            // 有効なタグのみ保持（存在しないタグは削除）
+            const validTags = tags.filter(tagId => {
+                if (tagId === 'root') return true;
+                return next.folders && next.folders.some((f) => f.id === tagId);
+            });
+            if (!validTags.length) {
+                validTags.push('root');
+            }
+            return {
+                title: ch.title || `第${idx + 1}話`,
+                body: ch.body || '',
+                memos: (ch.memos && ch.memos.length ? ch.memos : [{name:'メモ', content:''}]).map((m)=>({name:m.name||'メモ', content:m.content||'', attachments:(m.attachments||[]).map((a)=>({id:a.id||'',name:a.name||'file',type:a.type||'application/octet-stream',size:a.size||0,createdAt:a.createdAt||Date.now(),storage:a.storage||'inline',githubPath:a.githubPath||null,data:typeof a.data==='string'?a.data:undefined}))})),
+                currentMemoIdx: Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0,
+                snapshots: ch.snapshots || [],
+                tags: validTags
+            };
+        });
+        if (!next.chapters.length) next.chapters = [{title:'第一話', body:'', memos:[{name:'メモ', content:''}], currentMemoIdx:0, snapshots:[], tags:['root']}];
         next.folders = next.folders && next.folders.length ? next.folders : [{id:'root',name:'既定タグ'}];
         if (!next.folders.some((f) => f.id === 'root')) next.folders.unshift({id:'root',name:'既定タグ'});
         next.currentFolderId = next.currentFolderId || 'all';
@@ -206,9 +231,6 @@
             if (!Number.isInteger(bundle.currentMemoIdx)) bundle.currentMemoIdx = 0;
             next.folderMemos[k] = bundle;
         });
-        next.chapters.forEach((ch) => {
-            if (!next.folders.some((f) => f.id === ch.folderId)) ch.folderId = 'root';
-        });
         next.aiKeysEnc = (next.aiKeysEnc && typeof next.aiKeysEnc === 'object') ? next.aiKeysEnc : {};
         if (next.aiKeyEnc && !next.aiKeysEnc[next.aiProvider || 'openrouter']) next.aiKeysEnc[next.aiProvider || 'openrouter'] = next.aiKeyEnc;
         next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
@@ -217,6 +239,47 @@
         next.syncMeta = (next.syncMeta && typeof next.syncMeta === 'object') ? next.syncMeta : {};
         next.assetsIndex = (next.assetsIndex && Array.isArray(next.assetsIndex.items)) ? next.assetsIndex : {items:[]};
         return next;
+    }
+    // タグ管理関数群
+    function addTagToChapter(chapterIdx, tagId) {
+        if (!state.chapters[chapterIdx]) return;
+        const tags = state.chapters[chapterIdx].tags || [];
+        if (!tags.includes(tagId)) {
+            tags.push(tagId);
+            state.chapters[chapterIdx].tags = tags;
+        }
+    }
+    function removeTagFromChapter(chapterIdx, tagId) {
+        if (!state.chapters[chapterIdx]) return;
+        const tags = state.chapters[chapterIdx].tags || [];
+        state.chapters[chapterIdx].tags = tags.filter(t => t !== tagId);
+        // 全タグを削除してしまう場合はrootを追加
+        if (!state.chapters[chapterIdx].tags.length) {
+            state.chapters[chapterIdx].tags = ['root'];
+        }
+    }
+    function toggleTagOnChapter(chapterIdx, tagId) {
+        if (!state.chapters[chapterIdx]) return;
+        const tags = state.chapters[chapterIdx].tags || [];
+        if (tags.includes(tagId)) {
+            removeTagFromChapter(chapterIdx, tagId);
+        } else {
+            addTagToChapter(chapterIdx, tagId);
+        }
+    }
+    function hasChapterTag(chapterIdx, tagId) {
+        if (!state.chapters[chapterIdx]) return false;
+        const tags = state.chapters[chapterIdx].tags || [];
+        return tags.includes(tagId);
+    }
+    function getChaptersWithTag(tagId) {
+        return state.chapters
+            .map((ch, idx) => ({idx, chapter: ch}))
+            .filter(({chapter}) => {
+                const tags = chapter.tags || [];
+                return tags.includes(tagId);
+            })
+            .map(({idx}) => idx);
     }
     function getAIKeyInputId(provider) {
         return `ai-api-key-${provider}`;
@@ -825,16 +888,55 @@
         else if (state.currentIdx === ni) state.currentIdx = i;
         refreshUI(); save();
     }
-    function cycleChapterFolder(i) {
-        const idx = state.folders.findIndex((f) => f.id === (state.chapters[i].folderId || 'root'));
-        const next = state.folders[(idx + 1) % state.folders.length];
-        state.chapters[i].folderId = next.id;
+    // 複数タグ対応により cycleChapterFolder は廃止
+    // 代わりに renderChapterTagUI で各話のタグを編集
+    function toggleChapterTagUI(chapterIdx, tagId) {
+        toggleTagOnChapter(chapterIdx, tagId);
         refreshUI(); save();
     }
     function renameChapter(i) {
         const next = prompt('話タイトル', state.chapters[i].title);
         if (!next) return;
         state.chapters[i].title = next.trim();
+        refreshUI(); save();
+    }
+    let currentTagEditorChapterIdx = -1;
+    function openChapterTagEditor(chapterIdx) {
+        if (!state.chapters[chapterIdx]) return;
+        const ch = state.chapters[chapterIdx];
+        const currentTags = ch.tags || [];
+        currentTagEditorChapterIdx = chapterIdx;
+        
+        // タイトルを設定
+        const titleEl = document.getElementById('tag-editor-title');
+        if (titleEl) titleEl.textContent = `「${ch.title}」のタグ編集`;
+        
+        // チェックボックスを生成
+        const checkboxesEl = document.getElementById('tag-editor-checkboxes');
+        if (checkboxesEl) {
+            checkboxesEl.innerHTML = state.folders.map(f => 
+                `<label style="display:block; margin:8px 0; cursor:pointer;"><input type="checkbox" id="tag-${f.id}" class="tag-checkbox" value="${f.id}" ${currentTags.includes(f.id) ? 'checked' : ''}> ${f.name}</label>`
+            ).join('');
+        }
+        
+        // モーダルを表示
+        const modal = document.getElementById('tag-editor-modal');
+        if (modal) modal.style.display = 'flex';
+    }
+    function closeTagEditor() {
+        const modal = document.getElementById('tag-editor-modal');
+        if (modal) modal.style.display = 'none';
+        currentTagEditorChapterIdx = -1;
+    }
+    function saveTagEditor() {
+        if (currentTagEditorChapterIdx < 0) return;
+        const checkboxes = document.querySelectorAll('.tag-checkbox:checked');
+        const newTags = Array.from(checkboxes).map(cb => cb.value);
+        if (!newTags.length) {
+            newTags.push('root');
+        }
+        state.chapters[currentTagEditorChapterIdx].tags = newTags;
+        closeTagEditor();
         refreshUI(); save();
     }
     var favoriteActionDefs = {
@@ -884,7 +986,7 @@
             actionsHtml += `<div class=\"config-list\">${stat}${top}</div>`;
         }
         document.getElementById('favorite-actions').innerHTML = actionsHtml || '<div class="config-item">機能を選んでください</div>';
-        document.getElementById('favorite-order-list').innerHTML = actions.map((k, i) => `<div class="config-item"><span style="flex:1">${favoriteActionDefs[k].label}</span><button onclick="moveFavoriteAction(${i},-1)"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveFavoriteAction(${i},1)"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button></div>`).join('') || '<div class="config-item">順序設定対象なし</div>';
+        document.getElementById('favorite-order-list').innerHTML = actions.map((k, i) => `<div class="config-item"><span style="flex:1">${favoriteActionDefs[k].label}</span><button onclick="moveFavoriteAction(${i},-1)"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveFavoriteAction(${i},1)"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button></div>`).join('') || '<div class="config-item">順序設定対���なし</div>';
     }
     function toggleFavoriteAction(key, checked) {
         const list = state.favoriteActionKeys || [];
@@ -970,7 +1072,11 @@
     }
     function getVisibleChapterIndexes() {
         const fid = state.currentFolderId || 'all';
-        return state.chapters.map((_,i)=>i).filter((i)=> fid === 'all' || state.chapters[i].folderId === fid);
+        return state.chapters.map((_,i)=>i).filter((i)=> {
+            if (fid === 'all') return true;
+            const tags = state.chapters[i].tags || [];
+            return tags.includes(fid);
+        });
     }
     function renderFolderFilter() {
         const sel = document.getElementById('folder-filter');
@@ -1092,7 +1198,16 @@
     function refreshUI() {
         renderFolderFilter();
         const visible = getVisibleChapterIndexes();
-        document.getElementById('chapter-list').innerHTML = visible.map((i) => { const ch = state.chapters[i]; return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}<small style=\"opacity:.6; margin-left:6px;\">[${(state.folders.find(f=>f.id===ch.folderId)||{name:'既定タグ'}).name}]</small></button><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="cycleChapterFolder(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`; }).join('');
+        document.getElementById('chapter-list').innerHTML = visible.map((i) => { 
+            const ch = state.chapters[i]; 
+            const tags = ch.tags || ['root'];
+            const tagBadges = tags.map(tagId => {
+                const folder = state.folders.find(f => f.id === tagId);
+                const tagName = folder ? folder.name : tagId;
+                return `<span style="display:inline-block; background:var(--input-bg); padding:2px 6px; margin-right:4px; border-radius:3px; font-size:11px; margin-top:2px;">${tagName}</span>`;
+            }).join('');
+            return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><div style="flex:1;"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}</button><div style="margin-top:2px;">${tagBadges}</div></div><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="openChapterTagEditor(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);" title="タグ編集"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`; 
+        }).join('');
         renderDownloadTargets();
         renderList('replace-list', state.replaceRules || [], 'replace');
         renderList('insert-list', state.insertButtons || [], 'insert');
@@ -1638,7 +1753,7 @@ ${scopeText.slice(0, 12000)}
         reader.readAsText(file);
     }
     function showPreview() { document.getElementById('preview-overlay').innerHTML = editor.value.replace(/\n/g, '<br>'); document.getElementById('preview-overlay').style.display = 'block'; }
-    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:"", attachments: []}], currentMemoIdx: 0, folderId: state.currentFolderId && state.currentFolderId !== 'all' ? state.currentFolderId : 'root'}); state.currentIdx = state.chapters.length - 1; refreshUI(); loadChapter(state.currentIdx); }
+    function addChapter() { const t = prompt("タイトル:"); if(!t) return; save(); const tags = state.currentFolderId && state.currentFolderId !== 'all' ? [state.currentFolderId] : ['root']; state.chapters.push({title: t, body: "", snapshots: [], memos: [{name:"メモ", content:"", attachments: []}], currentMemoIdx: 0, tags: tags}); state.currentIdx = state.chapters.length - 1; refreshUI(); loadChapter(state.currentIdx); }
     function deleteChapter(i) { if(state.chapters.length <= 1 || !confirm("削除？")) return; state.chapters.splice(i, 1); state.currentIdx = 0; refreshUI(); loadChapter(0); }
     function splitChapter() {
         const pos = editor.selectionStart; const bodyBefore = editor.value.slice(0, pos); const bodyAfter = editor.value.slice(pos);

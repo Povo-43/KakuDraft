@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;700&family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@400;700&family=Sawarabi+Mincho&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./app.css">
-
+    <link href="https://fonts.googleapis.com/css2?family=Haptic:wght@400;700&family=Kaisei+Opti:wght@400;700&family=Kokoro:wght@400;700&family=Shippori+Mincho:wght@400;700&family=Zen+Maru+Gothic:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body data-theme="light">
 <main>
@@ -78,7 +78,7 @@
                 <div style="display:flex; gap:5px;"><button class="sys-btn" onclick="toggleTheme()" style="flex:1;"><span class="material-icons">contrast</span></button><button class="sys-btn" onclick="changeFontSize(-1)" style="flex:1;">A-</button><button class="sys-btn" onclick="changeFontSize(1)" style="flex:1;">A+</button></div><label class="config-item" style="cursor:pointer;"><input type="checkbox" id="wakelock-toggle" onchange="toggleWakeLock(this.checked)"><span>画面消灯を防止</span></label>
 
 <label id="font-online-label" style="font-size:11px; font-weight:bold;">フォント（オンライン時のみ）</label>
-                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option></select>
+                <select id="font-family" class="sys-btn" onchange="changeFontFamily(this.value)"><option value="'Sawarabi Mincho', serif">Sawarabi Mincho</option><option value="'Noto Serif JP', serif">Noto Serif JP</option><option value="'Noto Sans JP', sans-serif">Noto Sans JP</option><option value="'M PLUS 1p', sans-serif">M PLUS 1p</option><option value="'Haptic', serif">Haptic</option><option value="'Kaisei Opti', serif">Kaisei Opti</option><option value="'Kokoro', serif">Kokoro</option><option value="'Shippori Mincho', serif">Shippori Mincho</option><option value="'Zen Maru Gothic', sans-serif">Zen Maru Gothic</option></select>
             </div>
 
             <div class="menu-tab-panel" id="menu-tab-ai" style="display:none;">
@@ -177,6 +177,12 @@
     </div>
 </div>
 
-<script src="./app.js" defer></script>
+<!-- Modular app loading: order matters -->
+<script src="./app-core.js" defer></script>
+<script src="./app-storage.js" defer></script>
+<script src="./app-github.js" defer></script>
+<script src="./app-editor.js" defer></script>
+<script src="./app-ai.js" defer></script>
+<script src="./app-ui.js" defer></script>
 </body>
 </html>

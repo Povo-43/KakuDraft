@@ -111,6 +111,9 @@
                 <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
                 <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:16px;">help</span> ヘルプ</button>
                 <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
+                <h4>GitHub スナップショット</h4>
+                <button class="sys-btn" onclick="fetchGithubSnapshots()"><span class="material-icons" style="font-size:16px;">cloud_sync</span> スナップショット一覧取得</button>
+                <div id="gh-snapshot-list" class="config-list gh-snapshot-list"></div>
             </div>
 
             <div class="menu-tab-panel" id="menu-tab-analytics" style="display:none;">

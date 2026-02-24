@@ -52,3 +52,16 @@ KakuDraft はブラウザで動作する日本語向け執筆アプリです。�
 1. `index.html` をブラウザで開く
 2. バックアップタブで GitHub PAT / リポジトリ / 端末名を入力
 3. `UP` で保存、`DOWN` で復元
+
+
+## USSP SDK 連携
+
+バックアップタブから USSP SDK を使った同期ができます。
+
+- 入力項目: `USSP Base URL` のみ（`Client ID` / `Redirect URI` / `Namespace` / `Prefix` はアプリが自動設定）
+- `USSPログイン` で OAuth 認証開始（`/callback/index.html` で受信後 `/index.html` へ戻る）
+- `USSP UP` で設定・章インデックス・メモ・AIチャット・テキストバックアップを USSP へアップロード
+- `USSP DOWN` で USSP から復元
+
+> 事前に `ussp-sdk` が利用可能な環境（CDN読み込み）である必要があります。
+

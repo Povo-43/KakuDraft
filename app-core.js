@@ -37,6 +37,7 @@ let state = {
     insertButtons: [{label: "ルビ", value: "|《》"}, {label: "強調", value: "《》"}, {label: "「", value: "「"}],
     fontSize: 18, theme: "light",
     ghTokenEnc: "", ghTokenLegacy: "", ghRepo: "", deviceName: "",
+    usspBaseUrl: '',
     menuTab: 'favorites',
     favoriteActionKeys: ['sync-up','take-snapshot','toggle-theme'],
     fontFamily: "'Sawarabi Mincho', serif",
@@ -224,6 +225,7 @@ function normalizeStateShape(raw) {
     next.aiTab = next.aiTab === 'proofread' ? 'proofread' : 'chat';
     next.aiFreeOnly = !!next.aiFreeOnly;
     next.aiUsage = (next.aiUsage && typeof next.aiUsage === 'object') ? next.aiUsage : {};
+    next.usspBaseUrl = next.usspBaseUrl || '';
     next.syncMeta = (next.syncMeta && typeof next.syncMeta === 'object') ? next.syncMeta : {};
     next.assetsIndex = (next.assetsIndex && Array.isArray(next.assetsIndex.items)) ? next.assetsIndex : {items:[]};
 

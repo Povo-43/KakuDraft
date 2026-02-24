@@ -106,6 +106,10 @@
                 <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名 or owner/repo"></div>
                 <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
                 <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:19px;">cloud_upload</span> UP</button><button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:19px;">cloud_download</span> DOWN</button></div>
+                <h4>USSP 同期</h4>
+                <div class="config-input-group"><input type="text" id="ussp-base-url" placeholder="USSP Base URL (例: https://storage.example.com)"></div>
+                <div class="config-item" style="font-size:12px;">Server URL 以外（Client ID / Redirect URI / Namespace / Prefix）は KakuDraft が自動設定します。</div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="usspLogin()"><span class="material-icons" style="font-size:19px;">login</span> USSPログイン</button><button class="sys-btn" onclick="usspSync('up')"><span class="material-icons" style="font-size:19px;">cloud_upload</span> USSP UP</button><button class="sys-btn" onclick="usspSync('down')"><span class="material-icons" style="font-size:19px;">cloud_download</span> USSP DOWN</button></div>
                 <h4>エクスポート</h4>
                 <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:19px;">download</span> JSON出力</button>
                 <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:19px;">upload</span> JSON復元</button>
@@ -178,6 +182,7 @@
 </div>
 
 <!-- Modular app loading: order matters -->
+<script src="https://unpkg.com/ussp-sdk"></script>
 <script src="./app-core.js" defer></script>
 <script src="./app-storage.js" defer></script>
 <script src="./app-github.js" defer></script>

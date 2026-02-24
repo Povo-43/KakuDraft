@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7';
 const APP_CACHE = `kakudraft-app-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `kakudraft-runtime-${CACHE_VERSION}`;
 const FONT_CACHE = `kakudraft-font-${CACHE_VERSION}`;
@@ -6,6 +6,7 @@ const FONT_CACHE = `kakudraft-font-${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
   './index.html',
+  './callback/index.html',
   './help.html',
   './app.css',
   './app-core.js',

@@ -3,6 +3,9 @@
  *  GitHub API (with Tree API optimization), sync, snapshots, diff
  * =================================================================== */
 
+const USSP_DEFAULT_NAMESPACE_ID = 1;
+const USSP_DEFAULT_PREFIX = 'kakudraft';
+
 // === Cloud Pieces (build / apply / migrate) ===
 function buildCloudPieces() {
     const chapterIndex = (state.chapters || []).map((ch, idx) => ({
@@ -17,7 +20,8 @@ function buildCloudPieces() {
             replaceRules: state.replaceRules, insertButtons: state.insertButtons, fontSize: state.fontSize, theme: state.theme,
             deviceName: state.deviceName, menuTab: state.menuTab, favoriteActionKeys: state.favoriteActionKeys, fontFamily: state.fontFamily,
             folders: state.folders, currentFolderId: state.currentFolderId, favoriteEditMode: state.favoriteEditMode, keepScreenOn: state.keepScreenOn,
-            aiProvider: state.aiProvider, aiModel: state.aiModel, aiTab: state.aiTab, aiFreeOnly: state.aiFreeOnly, aiUsage: state.aiUsage
+            aiProvider: state.aiProvider, aiModel: state.aiModel, aiTab: state.aiTab, aiFreeOnly: state.aiFreeOnly, aiUsage: state.aiUsage,
+            usspBaseUrl: state.usspBaseUrl
         },
         keys: { ghTokenEnc: state.ghTokenEnc, ghRepo: state.ghRepo, deviceName: state.deviceName, aiKeyEnc: state.aiKeyEnc, aiKeysEnc: state.aiKeysEnc },
         stories: { chapters: chapterIndex, currentIdx: state.currentIdx, writingSessions: state.writingSessions },
@@ -344,6 +348,122 @@ async function githubSync(mode) {
         console.error(err);
         hideProgressToast();
         showToast(`GitHub同期エラー: ${err.message}`, 'error');
+    }
+}
+
+
+function getUSSP() {
+    const sdk = window.USSP || window.ussp || null;
+    if (!sdk) throw new Error('USSP SDK が読み込まれていません');
+    return sdk;
+}
+
+function getUSSPRedirectUri() {
+    return `${window.location.origin}/callback/index.html`;
+}
+
+async function initUSSPFromState() {
+    const sdk = getUSSP();
+    const baseUrl = state.usspBaseUrl || document.getElementById('ussp-base-url')?.value?.trim();
+    if (!baseUrl) throw new Error('USSP設定（Base URL）を入力してください');
+
+    const clientId = `kakudraft-${window.location.host || 'web'}`;
+    const redirectUri = getUSSPRedirectUri();
+    sdk.config.url(baseUrl);
+    await sdk.init({ clientId, redirectUri });
+    return sdk;
+}
+
+function getUSSPPath(path) {
+    const prefix = USSP_DEFAULT_PREFIX;
+    const normalized = (path || '').replace(/^\/+/, '');
+    return `${prefix}/${normalized}`;
+}
+
+async function usspLogin() {
+    try {
+        const baseUrl = state.usspBaseUrl || document.getElementById('ussp-base-url')?.value?.trim();
+        if (!baseUrl) throw new Error('USSP設定（Base URL）を入力してください');
+        sessionStorage.setItem('kakudraft-ussp-base-url', baseUrl);
+        const sdk = await initUSSPFromState();
+        sdk.auth.login();
+    } catch (err) {
+        showToast(`USSPログインエラー: ${err.message}`, 'error');
+    }
+}
+
+async function usspSync(mode) {
+    save();
+    try {
+        const sdk = await initUSSPFromState();
+        const namespaceId = USSP_DEFAULT_NAMESPACE_ID;
+        if (!sdk.auth.isAuthenticated()) throw new Error('USSPログインが必要です');
+
+        if (mode === 'up') {
+            const pieces = buildCloudPieces();
+            const files = {
+                [CLOUD_PATHS.settings]: JSON.stringify(pieces.settings),
+                [CLOUD_PATHS.keys]: JSON.stringify(pieces.keys),
+                [CLOUD_PATHS.stories]: JSON.stringify(pieces.stories),
+                [CLOUD_PATHS.memos]: JSON.stringify(pieces.memos),
+                [CLOUD_PATHS.aiChat]: JSON.stringify(pieces.aiChat),
+                [CLOUD_PATHS.metadata]: JSON.stringify({ updatedAt: Date.now(), files: Object.keys(CLOUD_PATHS) }),
+                [CLOUD_PATHS.assetsIndex]: JSON.stringify(pieces.assetsIndex),
+                ...buildTextBackupFiles()
+            };
+            const entries = Object.entries(files);
+            for (let i = 0; i < entries.length; i++) {
+                const [path, content] = entries[i];
+                showProgressToast('USSP UP: アップロード中...', i + 1, entries.length);
+                await sdk.files.upload({
+                    namespaceId,
+                    path: getUSSPPath(path),
+                    file: new Blob([content], { type: 'text/plain;charset=utf-8' })
+                });
+            }
+            hideProgressToast();
+            showToast(`USSP UP完了 (${entries.length}ファイル)`, 'success');
+            return;
+        }
+
+        const baseKeys = ['settings', 'keys', 'stories', 'memos', 'aiChat', 'assetsIndex'];
+        const remote = {};
+        for (const key of baseKeys) {
+            try {
+                const blob = await sdk.files.download({ namespaceId, path: getUSSPPath(CLOUD_PATHS[key]) });
+                remote[key] = JSON.parse(await blob.text());
+            } catch { }
+        }
+        if (!remote.settings && !remote.stories && !remote.memos) throw new Error('USSP側に復元データが見つかりません');
+        applyCloudPieces(remote, { preserveLocalSecrets: true, preserveLocalUiPrefs: false, preserveLocalDeviceName: true });
+
+        const merged = structuredClone(state);
+        await (async () => {
+            const chapters = merged.chapters || [];
+            for (let i = 0; i < chapters.length; i++) {
+                const ch = chapters[i];
+                const chapterId = ch.id || `chapter_${i + 1}`;
+                try {
+                    const bodyBlob = await sdk.files.download({ namespaceId, path: getUSSPPath(`話/${chapterId}/body.txt`) });
+                    ch.body = await bodyBlob.text();
+                } catch { }
+                for (let m = 0; m < (ch.memos || []).length; m++) {
+                    try {
+                        const memoBlob = await sdk.files.download({ namespaceId, path: getUSSPPath(`話/${chapterId}/memo_${m + 1}.txt`) });
+                        ch.memos[m].content = await memoBlob.text();
+                    } catch { }
+                }
+            }
+        })();
+
+        state = normalizeStateShape(merged);
+        await persistNow();
+        refreshUI();
+        loadChapter(state.currentIdx);
+        showToast('USSP DOWN完了', 'success');
+    } catch (err) {
+        hideProgressToast();
+        showToast(`USSP同期エラー: ${err.message}`, 'error');
     }
 }
 

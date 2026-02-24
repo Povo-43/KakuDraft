@@ -139,6 +139,7 @@ function refreshUI() {
     if (aiFreeOnly) aiFreeOnly.checked = !!state.aiFreeOnly;
 
     renderFolderFilter();
+    if (typeof renderMemoScopeSwitch === 'function') renderMemoScopeSwitch();
     const visible = getVisibleChapterIndexes();
     document.getElementById('chapter-list').innerHTML = visible.map(i => {
         const ch = state.chapters[i];

@@ -19,8 +19,8 @@
 
     <div id="memo-panel" class="side-panel">
         <div class="scope-switch">
-            <span id="scope-local" style="cursor:pointer; font-weight:bold;" onclick="switchMemoScope('local')">● 各話</span>
-            <span id="scope-folder" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('folder')">● タグ</span><span id="scope-global" style="cursor:pointer; opacity:0.5;" onclick="switchMemoScope('global')">● 全体</span>
+            <span id="scope-local" class="active" onclick="switchMemoScope('local')">● 各話</span>
+            <span id="scope-folder" onclick="switchMemoScope('folder')">● タグ</span><span id="scope-global" onclick="switchMemoScope('global')">● 全体</span>
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div class="memo-add-row"><input type="text" id="new-memo-name" placeholder="＋メモ名" class="input-plain"><button onclick="addMemoTab()" class="icon-btn"><span class="material-icons">add</span></button></div>

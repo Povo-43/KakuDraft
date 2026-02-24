@@ -4,7 +4,21 @@
  * =================================================================== */
 
 // === UI Menu Tab ===
-function switchMenuTab(tab) { state.menuTab = tab; refreshUI(); save(); }
+function applyMenuTabUI(activeTab) {
+    const nextTab = activeTab || 'favorites';
+    document.querySelectorAll('#menu-tabs .tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.tab === nextTab);
+    });
+    document.querySelectorAll('.menu-tab-panel').forEach(panel => {
+        panel.style.display = panel.id === `menu-tab-${nextTab}` ? 'block' : 'none';
+    });
+}
+
+function switchMenuTab(tab, skipSave = false) {
+    state.menuTab = tab || 'favorites';
+    applyMenuTabUI(state.menuTab);
+    if (!skipSave) save();
+}
 
 function renderFavorites() {
     const box = document.getElementById('favorite-actions');
@@ -85,14 +99,14 @@ function refreshUI() {
             const folder = state.folders.find(f => f.id === tagId);
             return `<span style="display:inline-block; background:var(--input-bg); padding:2px 6px; margin-right:4px; border-radius:3px; font-size:11px; margin-top:2px;">${folder ? folder.name : tagId}</span>`;
         }).join('');
-        return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><div style="flex:1;"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${ch.title}</button><div style="margin-top:2px;">${tagBadges}</div></div><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="openChapterTagEditor(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);" title="タグ編集"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`;
+        return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><div style="flex:1;"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${escapeHtml(ch.title)}</button><div style="margin-top:2px;">${tagBadges}</div></div><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="openChapterTagEditor(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);" title="タグ編集"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`;
     }).join('');
     renderDownloadTargets();
     renderList('replace-list', state.replaceRules || [], 'replace');
     renderList('insert-list', state.insertButtons || [], 'insert');
     renderSnapshots(); updateButtons(); renderFavorites();
     const feb = document.getElementById('favorite-edit-block'); if (feb) feb.style.display = state.favoriteEditMode ? 'block' : 'none';
-    switchMenuTab(state.menuTab || 'favorites');
+    applyMenuTabUI(state.menuTab || 'favorites');
     updateStats();
 }
 
@@ -165,7 +179,8 @@ async function downloadSelectedZip() {
     const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g, '-');
     selected.forEach((idx, order) => {
         const chapter = state.chapters[idx];
-        const folderName = (state.folders.find(f => f.id === chapter.folderId) || {name:'既定タグ'}).name;
+        const primaryTagId = (chapter.tags && chapter.tags[0]) || 'root';
+        const folderName = (state.folders.find(f => f.id === primaryTagId) || {name:'既定タグ'}).name;
         zip.file(`${stamp}_${String(order + 1).padStart(2, '0')}_${sanitizeFileName(folderName)}_${sanitizeFileName(chapter.title)}.txt`, createUtf8BytesWithBom(chapter.body || ''));
     });
     triggerDownload(await zip.generateAsync({ type: 'blob' }), 'kakudraft_selected.zip');

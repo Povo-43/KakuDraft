@@ -5,7 +5,10 @@
 
 // === IndexedDB Operations ===
 function openDb() {
-    return new Promise((resolve, reject) => {
+    if (openDb._db) return Promise.resolve(openDb._db);
+    if (openDb._opening) return openDb._opening;
+
+    openDb._opening = new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
@@ -13,9 +16,16 @@ function openDb() {
             if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'id' });
             if (!db.objectStoreNames.contains('attachments')) db.createObjectStore('attachments', { keyPath: 'id' });
         };
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+            openDb._db = request.result;
+            openDb._db.onclose = () => { openDb._db = null; };
+            openDb._db.onversionchange = () => { try { openDb._db.close(); } catch {} openDb._db = null; };
+            resolve(openDb._db);
+        };
         request.onerror = () => reject(request.error);
-    });
+    }).finally(() => { openDb._opening = null; });
+
+    return openDb._opening;
 }
 
 async function dbGet(storeName, key) {
@@ -81,7 +91,7 @@ function queuePersist() {
     persistTimer = setTimeout(async () => {
         try { await persistNow(); }
         catch (e) { console.error(e); showToast('保存に失敗しました（再試行してください）', 'error'); }
-    }, 60);
+    }, 220);
 }
 
 async function loadPersistedState() {
@@ -102,13 +112,19 @@ async function loadPersistedState() {
 
 // === Auto-save on browser close ===
 function setupAutoSave() {
-    document.addEventListener('visibilitychange', autoSaveSync);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') autoSaveSync();
+    });
     window.addEventListener('pagehide', autoSaveSync);
     window.addEventListener('beforeunload', autoSaveSync);
 }
 
 function autoSaveSync() {
-    save();
+    try {
+        save(true);
+    } catch (e) {
+        console.error('Auto-save sync failed:', e);
+    }
 }
 
 async function autoSaveAsync() {

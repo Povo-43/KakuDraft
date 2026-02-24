@@ -205,11 +205,17 @@ function normalizeStateShape(raw) {
     if (!next.folders.some(f => f.id === 'root')) next.folders.unshift({id:'root',name:'既定タグ'});
     next.currentFolderId = next.currentFolderId || 'all';
 
+    if (!['local', 'folder', 'global'].includes(next.memoScope)) next.memoScope = 'local';
+
     next.globalMemos = (next.globalMemos?.length ? next.globalMemos : [{name:'共通設定', content:'', attachments:[]}]).map(m => normalizeMemo(m, '共通設定'));
-    Object.keys(next.folderMemos || {}).forEach(k => {
+    next.folderMemos = (next.folderMemos && typeof next.folderMemos === 'object') ? next.folderMemos : {};
+    (next.folders || []).forEach(folder => {
+        if (!next.folderMemos[folder.id]) next.folderMemos[folder.id] = { memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0 };
+    });
+    Object.keys(next.folderMemos).forEach(k => {
         const bundle = next.folderMemos[k] || { memos:[{name:'タグメモ',content:'',attachments:[]}], currentMemoIdx:0 };
         bundle.memos = (bundle.memos?.length ? bundle.memos : [{name:'タグメモ',content:'',attachments:[]}]).map(m => normalizeMemo(m, 'タグメモ'));
-        if (!Number.isInteger(bundle.currentMemoIdx)) bundle.currentMemoIdx = 0;
+        bundle.currentMemoIdx = Math.min(Math.max(Number.isInteger(bundle.currentMemoIdx) ? bundle.currentMemoIdx : 0, 0), bundle.memos.length - 1);
         next.folderMemos[k] = bundle;
     });
 
@@ -220,6 +226,13 @@ function normalizeStateShape(raw) {
     next.aiUsage = (next.aiUsage && typeof next.aiUsage === 'object') ? next.aiUsage : {};
     next.syncMeta = (next.syncMeta && typeof next.syncMeta === 'object') ? next.syncMeta : {};
     next.assetsIndex = (next.assetsIndex && Array.isArray(next.assetsIndex.items)) ? next.assetsIndex : {items:[]};
+
+    next.currentIdx = Math.min(Math.max(Number.isInteger(next.currentIdx) ? next.currentIdx : 0, 0), next.chapters.length - 1);
+    next.currentGlobalMemoIdx = Math.min(Math.max(Number.isInteger(next.currentGlobalMemoIdx) ? next.currentGlobalMemoIdx : 0, 0), next.globalMemos.length - 1);
+    next.chapters = next.chapters.map(ch => ({
+        ...ch,
+        currentMemoIdx: Math.min(Math.max(Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0, 0), Math.max((ch.memos?.length || 1) - 1, 0))
+    }));
     return next;
 }
 

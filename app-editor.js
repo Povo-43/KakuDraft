@@ -38,7 +38,7 @@ function openChapterTagEditor(chapterIdx) {
     if (!dialogEl) return;
     const tagsHtml = (state.folders || []).map(f => {
         const checked = (ch.tags || ['root']).includes(f.id) ? 'checked' : '';
-        return `<label class="config-item" style="cursor:pointer;"><input id="tag-${f.id}" type="checkbox" ${checked}><span>${escapeHtml(f.name)}</span></label>`;
+        return `<label class="config-item" style="cursor:pointer;"><input type="checkbox" data-tag-id="${escapeHtml(f.id)}" ${checked}><span>${escapeHtml(f.name)}</span></label>`;
     }).join('');
     const content = document.getElementById('tag-editor-content');
     if (content) content.innerHTML = tagsHtml;
@@ -54,10 +54,7 @@ function closeTagEditor() {
 function saveTagEditor() {
     const chIdx = window._tagEditorChapterIdx;
     if (chIdx === undefined) return;
-    const selectedTags = [];
-    (state.folders || []).forEach(f => {
-        if (document.getElementById(`tag-${f.id}`)?.checked) selectedTags.push(f.id);
-    });
+    const selectedTags = Array.from(document.querySelectorAll('#tag-editor-content input[data-tag-id]:checked')).map(el => el.dataset.tagId);
     if (!selectedTags.length) selectedTags.push('root');
     state.chapters[chIdx].tags = selectedTags;
     closeTagEditor();
@@ -67,7 +64,22 @@ function saveTagEditor() {
 }
 
 // === Memos ===
-function switchMemoScope(scope) { save(); state.memoScope = scope; renderMemos(); }
+function renderMemoScopeSwitch() {
+    ['local', 'folder', 'global'].forEach(scope => {
+        const el = document.getElementById(`scope-${scope}`);
+        if (!el) return;
+        el.classList.toggle('active', state.memoScope === scope);
+    });
+}
+
+function switchMemoScope(scope) {
+    save();
+    state.memoScope = scope;
+    if (scope === 'folder' && state.currentFolderId === 'all') state.currentFolderId = 'root';
+    renderMemoScopeSwitch();
+    renderMemos();
+    save();
+}
 function renameMemo(i) { const memo = getCurrentMemo(); if (!memo) return; const newName = prompt("メモ名:", memo.name); if (newName) { memo.name = newName; renderMemos(); save(); } }
 function moveMemo(i, delta) {
     const memos = getCurrentMemoArray();
@@ -89,11 +101,21 @@ function switchMemo(i) {
 }
 function addMemoTab() { const newMemo = {name: prompt("新しいメモの名前:", "新規メモ") || "新規メモ", content: "", attachments: []}; const memos = getCurrentMemoArray(); if (memos) memos.push(newMemo); renderMemos(); switchMemo(memos.length - 1); save(); }
 function getCurrentMemo() { const memos = getCurrentMemoArray(); const idx = getCurrentMemoIndex(); return memos && idx >= 0 && idx < memos.length ? memos[idx] : null; }
-function getCurrentMemoArray() { if (state.memoScope === 'local') return state.chapters[state.currentIdx]?.memos; if (state.memoScope === 'global') return state.globalMemos; const bundle = state.folderMemos?.[state.currentFolderId]; return bundle?.memos; }
+function getCurrentFolderMemoId() {
+    if (state.currentFolderId && state.currentFolderId !== 'all') return state.currentFolderId;
+    return (state.folders || []).find(f => f.id === 'root') ? 'root' : state.folders?.[0]?.id;
+}
+
+function getCurrentMemoArray() {
+    if (state.memoScope === 'local') return state.chapters[state.currentIdx]?.memos;
+    if (state.memoScope === 'global') return state.globalMemos;
+    const bundle = state.folderMemos?.[getCurrentFolderMemoId()];
+    return bundle?.memos;
+}
 function getCurrentMemoIndex() {
     if (state.memoScope === 'local') return state.chapters[state.currentIdx]?.currentMemoIdx ?? 0;
     if (state.memoScope === 'global') return state.currentGlobalMemoIdx ?? 0;
-    const bundle = state.folderMemos?.[state.currentFolderId];
+    const bundle = state.folderMemos?.[getCurrentFolderMemoId()];
     return bundle?.currentMemoIdx ?? 0;
 }
 
@@ -107,7 +129,7 @@ function setCurrentMemoIndex(nextIdx) {
         state.currentGlobalMemoIdx = nextIdx;
         return;
     }
-    const bundle = state.folderMemos?.[state.currentFolderId];
+    const bundle = state.folderMemos?.[getCurrentFolderMemoId()];
     if (bundle) bundle.currentMemoIdx = nextIdx;
 }
 function getCurrentMemoContext() { const memo = getCurrentMemo(); if (!memo) return ''; let text = memo.content || ''; if (state.memoScope === 'local') text += '\n' + editor.value; return text; }
@@ -204,7 +226,7 @@ function addFolder() {
     showToast('フォルダを作成しました', 'success');
 }
 
-function changeFolderFilter(folderId) { state.currentFolderId = folderId || 'all'; refreshUI(); save(); }
+function changeFolderFilter(folderId) { state.currentFolderId = folderId || 'all'; if (state.memoScope === 'folder') renderMemos(); refreshUI(); save(); }
 function renameCurrentFolder() { const folder = state.folders.find(f => f.id === state.currentFolderId); if (!folder) return; const newName = prompt("フォルダ名:", folder.name); if (newName) { folder.name = newName; refreshUI(); save(); } }
 function getCurrentFolderMemoBundle() { const bundle = state.folderMemos?.[state.currentFolderId]; return bundle || {memos:[{name:'タグメモ', content:'', attachments:[]}], currentMemoIdx:0}; }
 

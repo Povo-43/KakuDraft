@@ -101,6 +101,8 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
   padding: 8px 10px;
 }
 .scope-switch { font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px; }
+.scope-switch span { cursor: pointer; opacity: 0.5; font-weight: 400; }
+.scope-switch span.active { opacity: 1; font-weight: 700; }
 .memo-add-row { display: flex; border-bottom: 1px solid var(--border); }
 .input-plain { flex: 1; border: none; padding: var(--space-3); font-size: var(--text-sm); background: var(--input-bg); color: var(--text); }
 .icon-btn { border: none; background: var(--panel); border-left: 1px solid var(--border); width: 50px; cursor: pointer; color: var(--text); display: flex; align-items: center; justify-content: center; padding: 0; }

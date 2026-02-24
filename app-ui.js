@@ -33,6 +33,8 @@ function renderFavorites() {
         'fetch-snapshots': { label: 'スナップショット一覧', icon: 'history', run: 'fetchGithubSnapshots()' },
         'install-pwa': { label: 'PWAをインストール', icon: 'download_for_offline', run: 'promptPWAInstall()' },
         'apply-pwa-update': { label: 'PWA更新適用', icon: 'system_update_alt', run: 'applyPWAUpdate()' },
+        'ussp-sync-up': { label: 'USSP UP', icon: 'cloud_upload', run: "usspSync('up')" },
+        'ussp-sync-down': { label: 'USSP DOWN', icon: 'cloud_download', run: "usspSync('down')" },
     };
     box.innerHTML = (state.favoriteActionKeys || []).map((key, i) => {
         const action = actions[key];
@@ -128,6 +130,8 @@ function refreshUI() {
     if (ghRepoInput && ghRepoInput.value !== (state.ghRepo || '')) ghRepoInput.value = state.ghRepo || '';
     const deviceNameInput = document.getElementById('device-name');
     if (deviceNameInput && deviceNameInput.value !== (state.deviceName || '')) deviceNameInput.value = state.deviceName || '';
+    const usspBaseUrlInput = document.getElementById('ussp-base-url');
+    if (usspBaseUrlInput && usspBaseUrlInput.value !== (state.usspBaseUrl || '')) usspBaseUrlInput.value = state.usspBaseUrl || '';
 
     const fontSel = document.getElementById('font-family');
     if (fontSel && state.fontFamily) fontSel.value = state.fontFamily;
@@ -287,10 +291,23 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+
+function handleUSSPAuthResultFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get('usspAuth');
+    if (!result) return;
+    if (result === 'ok') showToast('USSP 認証に成功しました', 'success');
+    if (result === 'error') showToast('USSP 認証に失敗しました。再ログインしてください', 'error');
+    params.delete('usspAuth');
+    const next = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash || ''}`;
+    history.replaceState({}, '', next);
+}
+
 // === Initialization ===
 async function initializeApp() {
     try {
         // Load persisted state
+        handleUSSPAuthResultFromQuery();
         await loadPersistedState();
         await loadPersistedAIChat();
         
@@ -308,6 +325,7 @@ async function initializeApp() {
         
         // Set up auto-save
         setupAutoSave();
+
         
         // Check for remote diff on startup
         const tokenPlain = document.getElementById('gh-token')?.value?.trim();
@@ -329,6 +347,8 @@ async function initializeApp() {
         if (ghRepoInput) ghRepoInput.addEventListener('input', () => { state.ghRepo = ghRepoInput.value.trim(); queuePersist(); });
         const deviceNameInput = document.getElementById('device-name');
         if (deviceNameInput) deviceNameInput.addEventListener('input', () => { state.deviceName = deviceNameInput.value.trim(); queuePersist(); });
+        const usspBaseUrlInput = document.getElementById('ussp-base-url');
+        if (usspBaseUrlInput) usspBaseUrlInput.addEventListener('input', () => { state.usspBaseUrl = usspBaseUrlInput.value.trim(); queuePersist(); });
         
         // Render
         renderMemos();

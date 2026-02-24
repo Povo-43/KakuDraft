@@ -34,27 +34,29 @@ function mergeChapter() { const ch = state.chapters[state.currentIdx]; if (state
 // === Chapter tags ===
 function openChapterTagEditor(chapterIdx) {
     const ch = state.chapters[chapterIdx];
-    const dialogEl = document.getElementById('tag-editor-dialog');
-    if (!dialogEl) return;
+    const dialogEl = document.getElementById('tag-editor-modal');
+    if (!dialogEl || !ch) return;
     const tagsHtml = (state.folders || []).map(f => {
         const checked = (ch.tags || ['root']).includes(f.id) ? 'checked' : '';
         return `<label class="config-item" style="cursor:pointer;"><input type="checkbox" data-tag-id="${escapeHtml(f.id)}" ${checked}><span>${escapeHtml(f.name)}</span></label>`;
     }).join('');
-    const content = document.getElementById('tag-editor-content');
+    const content = document.getElementById('tag-editor-checkboxes');
     if (content) content.innerHTML = tagsHtml;
-    dialogEl.classList.add('show');
+    const title = document.getElementById('tag-editor-title');
+    if (title) title.textContent = `タグ編集: ${ch.title}`;
+    dialogEl.style.display = 'flex';
     window._tagEditorChapterIdx = chapterIdx;
 }
 
 function closeTagEditor() {
-    const dialogEl = document.getElementById('tag-editor-dialog');
-    if (dialogEl) dialogEl.classList.remove('show');
+    const dialogEl = document.getElementById('tag-editor-modal');
+    if (dialogEl) dialogEl.style.display = 'none';
 }
 
 function saveTagEditor() {
     const chIdx = window._tagEditorChapterIdx;
     if (chIdx === undefined) return;
-    const selectedTags = Array.from(document.querySelectorAll('#tag-editor-content input[data-tag-id]:checked')).map(el => el.dataset.tagId);
+    const selectedTags = Array.from(document.querySelectorAll('#tag-editor-checkboxes input[data-tag-id]:checked')).map(el => el.dataset.tagId);
     if (!selectedTags.length) selectedTags.push('root');
     state.chapters[chIdx].tags = selectedTags;
     closeTagEditor();
@@ -210,24 +212,38 @@ function getVisibleChapterIndexes() {
 function renderFolderFilter() {
     const container = document.getElementById('folder-filter');
     if (!container) return;
-    container.innerHTML = (state.folders || []).map(f => `
-        <button class="folder-btn ${state.currentFolderId === f.id ? 'active' : ''}" onclick="changeFolderFilter('${f.id}')">${escapeHtml(f.name)}</button>
-    `).join('') + `<button class="folder-btn ${state.currentFolderId === 'all' ? 'active' : ''}" onclick="changeFolderFilter('all')">すべて</button>`;
+    container.innerHTML = (state.folders || []).map(f => (
+        `<option value="${escapeHtml(f.id)}" ${state.currentFolderId === f.id ? 'selected' : ''}>${escapeHtml(f.name)}</option>`
+    )).join('') + `<option value="all" ${state.currentFolderId === 'all' ? 'selected' : ''}>すべて</option>`;
 }
 
 function addFolder() {
-    const name = prompt("フォルダ名:", "新規フォルダ");
+    const input = document.getElementById('new-folder-name');
+    const typedName = input?.value?.trim();
+    const name = typedName || prompt("タグ名:", "新規タグ");
     if (!name) return;
     const id = `folder-${Date.now()}`;
     state.folders.push({id, name});
     state.folderMemos[id] = {memos:[{name:'タグメモ', content:'', attachments:[]}], currentMemoIdx:0};
+    state.currentFolderId = id;
+    if (input) input.value = '';
     refreshUI();
     save();
-    showToast('フォルダを作成しました', 'success');
+    showToast('タグを作成しました', 'success');
 }
 
 function changeFolderFilter(folderId) { state.currentFolderId = folderId || 'all'; if (state.memoScope === 'folder') renderMemos(); refreshUI(); save(); }
-function renameCurrentFolder() { const folder = state.folders.find(f => f.id === state.currentFolderId); if (!folder) return; const newName = prompt("フォルダ名:", folder.name); if (newName) { folder.name = newName; refreshUI(); save(); } }
+function renameCurrentFolder() {
+    const folder = state.folders.find(f => f.id === state.currentFolderId);
+    if (!folder) return;
+    if (folder.id === 'root') return showToast('既定タグは名前変更できません', 'error');
+    const newName = prompt("タグ名:", folder.name)?.trim();
+    if (newName) {
+        folder.name = newName;
+        refreshUI();
+        save();
+    }
+}
 function getCurrentFolderMemoBundle() { const bundle = state.folderMemos?.[state.currentFolderId]; return bundle || {memos:[{name:'タグメモ', content:'', attachments:[]}], currentMemoIdx:0}; }
 
 // === Search & Replace ===

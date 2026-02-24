@@ -20,15 +20,34 @@ function buildCloudPieces() {
     };
 }
 
-function applyCloudPieces(remote) {
+function applyCloudPieces(remote, options = {}) {
+    const {
+        preserveLocalSecrets = false,
+        preserveLocalUiPrefs = false,
+        preserveLocalDeviceName = false
+    } = options;
     const merged = structuredClone(state);
     if (remote.settings) Object.assign(merged, remote.settings);
+    if (preserveLocalUiPrefs) {
+        merged.theme = state.theme;
+        merged.fontSize = state.fontSize;
+        merged.fontFamily = state.fontFamily;
+        merged.menuTab = state.menuTab;
+        merged.favoriteActionKeys = state.favoriteActionKeys;
+        merged.favoriteEditMode = state.favoriteEditMode;
+        merged.keepScreenOn = state.keepScreenOn;
+        merged.aiTab = state.aiTab;
+    }
     if (remote.keys) {
-        merged.ghTokenEnc = remote.keys.ghTokenEnc || merged.ghTokenEnc;
+        if (!preserveLocalSecrets || !merged.ghTokenEnc) merged.ghTokenEnc = remote.keys.ghTokenEnc || merged.ghTokenEnc;
         merged.ghRepo = remote.keys.ghRepo || merged.ghRepo;
-        merged.deviceName = remote.keys.deviceName || merged.deviceName;
-        merged.aiKeyEnc = remote.keys.aiKeyEnc || merged.aiKeyEnc;
-        merged.aiKeysEnc = remote.keys.aiKeysEnc || merged.aiKeysEnc;
+        if (!preserveLocalDeviceName || !merged.deviceName) merged.deviceName = remote.keys.deviceName || merged.deviceName;
+        if (!preserveLocalSecrets || !merged.aiKeyEnc) merged.aiKeyEnc = remote.keys.aiKeyEnc || merged.aiKeyEnc;
+        if (!preserveLocalSecrets) {
+            merged.aiKeysEnc = remote.keys.aiKeysEnc || merged.aiKeysEnc;
+        } else {
+            merged.aiKeysEnc = Object.assign({}, remote.keys.aiKeysEnc || {}, merged.aiKeysEnc || {});
+        }
     }
     if (remote.stories) {
         merged.chapters = remote.stories.chapters || merged.chapters;
@@ -241,7 +260,11 @@ async function githubSync(mode) {
 
             showProgressToast('DOWN: 復元中...', 1, 2);
             await addLocalSnapshot('before-download-local', structuredClone(state));
-            applyCloudPieces(remote);
+            applyCloudPieces(remote, {
+                preserveLocalSecrets: true,
+                preserveLocalUiPrefs: true,
+                preserveLocalDeviceName: true
+            });
             state.syncMeta = remote.metadata || state.syncMeta;
             await persistNow();
             showProgressToast('DOWN: 完了', 2, 2);

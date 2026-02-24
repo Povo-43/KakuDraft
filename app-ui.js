@@ -4,20 +4,20 @@
  * =================================================================== */
 
 // === UI Menu Tab ===
-function applyMenuTabUI(activeTab) {
-    const nextTab = activeTab || 'favorites';
+function applyMenuTab(tab) {
+    const activeTab = tab || 'favorites';
     document.querySelectorAll('#menu-tabs .tab').forEach(el => {
-        el.classList.toggle('active', el.dataset.tab === nextTab);
+        el.classList.toggle('active', el.dataset.tab === activeTab);
     });
-    document.querySelectorAll('.menu-tab-panel').forEach(panel => {
-        panel.style.display = panel.id === `menu-tab-${nextTab}` ? 'block' : 'none';
+    document.querySelectorAll('.menu-tab-panel').forEach(el => {
+        el.style.display = el.id === `menu-tab-${activeTab}` ? 'block' : 'none';
     });
 }
 
-function switchMenuTab(tab, skipSave = false) {
+function switchMenuTab(tab) {
     state.menuTab = tab || 'favorites';
-    applyMenuTabUI(state.menuTab);
-    if (!skipSave) save();
+    applyMenuTab(state.menuTab);
+    save();
 }
 
 function renderFavorites() {
@@ -106,7 +106,7 @@ function refreshUI() {
     renderList('insert-list', state.insertButtons || [], 'insert');
     renderSnapshots(); updateButtons(); renderFavorites();
     const feb = document.getElementById('favorite-edit-block'); if (feb) feb.style.display = state.favoriteEditMode ? 'block' : 'none';
-    applyMenuTabUI(state.menuTab || 'favorites');
+    applyMenuTab(state.menuTab || 'favorites');
     updateStats();
 }
 

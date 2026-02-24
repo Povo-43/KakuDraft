@@ -166,9 +166,30 @@ async function getAttachmentData(ref) {
 function buildTextBackupFiles() {
     const files = {};
     (state.chapters || []).forEach((ch, idx) => {
-        const fileName = `テキスト/${String(idx + 1).padStart(3, '0')}_${sanitizeFileName(ch.title)}.txt`;
-        files[fileName] = ch.body || '';
+        const chapterId = ch.id || `chapter_${idx + 1}`;
+        files[`話/${chapterId}/body.txt`] = ch.body || '';
+        (ch.memos || []).forEach((memo, memoIdx) => {
+            files[`話/${chapterId}/memo_${memoIdx + 1}.txt`] = memo.content || '';
+        });
     });
+
+    (state.globalMemos || []).forEach((memo, idx) => {
+        files[`メモ/global_${idx + 1}.txt`] = memo.content || '';
+    });
+
+    Object.entries(state.folderMemos || {}).forEach(([folderId, bundle]) => {
+        (bundle?.memos || []).forEach((memo, idx) => {
+            files[`メモ/folder_${folderId}_${idx + 1}.txt`] = memo.content || '';
+        });
+    });
+
+    const aiChatText = (aiChatState || []).map(item => {
+        const role = item?.role || 'assistant';
+        const content = item?.content || '';
+        return `[${role}]\n${content}`;
+    }).join('\n\n');
+    files['話/ai_chat.txt'] = aiChatText;
+
     return files;
 }
 

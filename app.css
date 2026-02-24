@@ -36,6 +36,10 @@ main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relati
 .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
 .chapter-item { padding: 10px; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
 .chapter-item.active { background: var(--bg); font-weight: bold; }
+.chapter-item { align-items: flex-start; gap: 6px; }
+.chapter-item > div:first-child { min-width: 0; }
+.chapter-item > div:first-child button { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-item button { flex-shrink: 0; }
 button { color: var(--text); background: none; border: none; border-radius: 0;}
 footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
 .btn-group { display: flex; overflow-x: auto; }

@@ -4,7 +4,20 @@
  * =================================================================== */
 
 // === Main save function ===
-function save() {
+function syncEditorToCurrentChapter() {
+    const ch = state.chapters?.[state.currentIdx];
+    if (ch) ch.body = editor.value || '';
+}
+
+function syncMemoInputToState() {
+    const memo = getCurrentMemo();
+    if (memo) memo.content = memoArea.value || '';
+}
+
+function save(immediate = false) {
+    syncEditorToCurrentChapter();
+    syncMemoInputToState();
+    if (immediate) return persistNow();
     queuePersist();
 }
 
@@ -56,14 +69,47 @@ function saveTagEditor() {
 // === Memos ===
 function switchMemoScope(scope) { save(); state.memoScope = scope; renderMemos(); }
 function renameMemo(i) { const memo = getCurrentMemo(); if (!memo) return; const newName = prompt("メモ名:", memo.name); if (newName) { memo.name = newName; renderMemos(); save(); } }
-function moveMemo(i, delta) { const memos = getCurrentMemoArray(); if (!memos || i + delta < 0 || i + delta >= memos.length) return; [memos[i], memos[i + delta]] = [memos[i + delta], memos[i]]; getCurrentMemoIndexRef()[0] = i + delta; renderMemos(); save(); }
-function renderMemos() { const memos = getCurrentMemoArray(); const container = document.getElementById('memo-tabs'); if (!container || !memos) return; container.innerHTML = memos.map((m, i) => `<button class="memo-tab ${i === (getCurrentMemoIndexRef()[0]) ? 'active' : ''}" onclick="switchMemo(${i})">${escapeHtml(m.name)}</button><button class="memo-tab-btn" onclick="renameMemo(${i})" title="名前変更"><span class="material-icons" style="font-size:14px;">edit</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, -1)" title="左に移動"><span class="material-icons" style="font-size:14px;">chevron_left</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, 1)" title="右に移動"><span class="material-icons" style="font-size:14px;">chevron_right</span></button><button class="memo-tab-btn" onclick="deleteMemo(${i})" title="削除"><span class="material-icons" style="font-size:14px;">close</span></button>`).join(''); renderMemoAttachments(); }
-function deleteMemo(i) { const memos = getCurrentMemoArray(); if (!memos || memos.length <= 1) { showToast('メモは1つ以上必要です', 'error'); return; } if (!confirm(`メモ「${escapeHtml(memos[i].name)}」を削除しますか？`)) return; memos.splice(i, 1); const ref = getCurrentMemoIndexRef(); if (ref[0] >= memos.length) ref[0] = memos.length - 1; switchMemo(ref[0]); save(); }
-function switchMemo(i) { const ref = getCurrentMemoIndexRef(); ref[0] = i; const memo = getCurrentMemo(); if (memo) memoArea.value = memo.content; renderMemos(); renderMemoAttachments(); }
+function moveMemo(i, delta) {
+    const memos = getCurrentMemoArray();
+    if (!memos || i + delta < 0 || i + delta >= memos.length) return;
+    [memos[i], memos[i + delta]] = [memos[i + delta], memos[i]];
+    setCurrentMemoIndex(i + delta);
+    renderMemos();
+    save();
+}
+function renderMemos() { const memos = getCurrentMemoArray(); const container = document.getElementById('memo-tabs'); if (!container || !memos) return; container.innerHTML = memos.map((m, i) => `<button class="memo-tab ${i === getCurrentMemoIndex() ? 'active' : ''}" onclick="switchMemo(${i})">${escapeHtml(m.name)}</button><button class="memo-tab-btn" onclick="renameMemo(${i})" title="名前変更"><span class="material-icons" style="font-size:14px;">edit</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, -1)" title="左に移動"><span class="material-icons" style="font-size:14px;">chevron_left</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, 1)" title="右に移動"><span class="material-icons" style="font-size:14px;">chevron_right</span></button><button class="memo-tab-btn" onclick="deleteMemo(${i})" title="削除"><span class="material-icons" style="font-size:14px;">close</span></button>`).join(''); renderMemoAttachments(); }
+function deleteMemo(i) { const memos = getCurrentMemoArray(); if (!memos || memos.length <= 1) { showToast('メモは1つ以上必要です', 'error'); return; } if (!confirm(`メモ「${escapeHtml(memos[i].name)}」を削除しますか？`)) return; memos.splice(i, 1); const nextIdx = Math.min(getCurrentMemoIndex(), memos.length - 1);
+    setCurrentMemoIndex(nextIdx); switchMemo(nextIdx); save(); }
+function switchMemo(i) {
+    setCurrentMemoIndex(i);
+    const memo = getCurrentMemo();
+    if (memo) memoArea.value = memo.content;
+    renderMemos();
+    renderMemoAttachments();
+}
 function addMemoTab() { const newMemo = {name: prompt("新しいメモの名前:", "新規メモ") || "新規メモ", content: "", attachments: []}; const memos = getCurrentMemoArray(); if (memos) memos.push(newMemo); renderMemos(); switchMemo(memos.length - 1); save(); }
-function getCurrentMemo() { const memos = getCurrentMemoArray(); const idx = getCurrentMemoIndexRef()[0]; return memos && idx >= 0 && idx < memos.length ? memos[idx] : null; }
+function getCurrentMemo() { const memos = getCurrentMemoArray(); const idx = getCurrentMemoIndex(); return memos && idx >= 0 && idx < memos.length ? memos[idx] : null; }
 function getCurrentMemoArray() { if (state.memoScope === 'local') return state.chapters[state.currentIdx]?.memos; if (state.memoScope === 'global') return state.globalMemos; const bundle = state.folderMemos?.[state.currentFolderId]; return bundle?.memos; }
-function getCurrentMemoIndexRef() { if (state.memoScope === 'local') return [state.chapters[state.currentIdx]?.currentMemoIdx]; if (state.memoScope === 'global') return [state.currentGlobalMemoIdx]; const bundle = state.folderMemos?.[state.currentFolderId]; return [bundle?.currentMemoIdx]; }
+function getCurrentMemoIndex() {
+    if (state.memoScope === 'local') return state.chapters[state.currentIdx]?.currentMemoIdx ?? 0;
+    if (state.memoScope === 'global') return state.currentGlobalMemoIdx ?? 0;
+    const bundle = state.folderMemos?.[state.currentFolderId];
+    return bundle?.currentMemoIdx ?? 0;
+}
+
+function setCurrentMemoIndex(nextIdx) {
+    if (state.memoScope === 'local') {
+        const ch = state.chapters[state.currentIdx];
+        if (ch) ch.currentMemoIdx = nextIdx;
+        return;
+    }
+    if (state.memoScope === 'global') {
+        state.currentGlobalMemoIdx = nextIdx;
+        return;
+    }
+    const bundle = state.folderMemos?.[state.currentFolderId];
+    if (bundle) bundle.currentMemoIdx = nextIdx;
+}
 function getCurrentMemoContext() { const memo = getCurrentMemo(); if (!memo) return ''; let text = memo.content || ''; if (state.memoScope === 'local') text += '\n' + editor.value; return text; }
 
 // === Memo attachments ===

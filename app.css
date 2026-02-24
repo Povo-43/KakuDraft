@@ -8,6 +8,14 @@
   --editor-size: 18px;
   --ui-font: system-ui, -apple-system, 'Segoe UI', sans-serif;
   --writing-font: 'Sawarabi Mincho', serif;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 10px;
+  --icon-size-base: 18px;
+  --control-height: 36px;
 }
 [data-theme="dark"] {
   --bg: #121212;
@@ -27,11 +35,11 @@ main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relati
 .side-panel.open { width: 350px; }
 .panel-content { padding: 20px; flex: 1; overflow-y: auto; box-sizing: border-box; -webkit-overflow-scrolling: touch; }
 .config-list { border: 1px solid var(--border); margin-bottom: 10px; font-size: 12px; background: var(--input-bg); min-height: 40px; }
-.config-item { display: flex; border-bottom: 1px solid var(--border); align-items: center; padding: 8px 10px; gap: 8px; color: var(--text); }
+.config-item { display: flex; border-bottom: 1px solid var(--border); align-items: center; padding: var(--space-2) var(--space-3); gap: var(--space-2); color: var(--text); font-size: var(--text-sm); }
 .config-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
 .config-input-group input, .config-input-group select, .config-input-group textarea { flex: 1; min-width: 0; padding: 6px; border: 1px solid var(--border); font-size: 11px; background: var(--input-bg); color: var(--text); border-radius: 0; }
 .tab-bar { display: flex; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; }
-.tab { padding: 10px 15px; font-size: 11px; cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; }
+.tab { padding: 10px 14px; font-size: var(--text-sm); cursor: pointer; border-right: 1px solid var(--border); white-space: nowrap; }
 .tab.active { background: var(--panel); font-weight: bold; border-bottom: 2px solid var(--text); }
 .chapter-list { border: 1px solid var(--border); margin-bottom: 10px; min-height: 80px; }
 .chapter-item { padding: 10px; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
@@ -40,11 +48,12 @@ main { display: flex; flex: 1; min-height: 0; overflow: hidden; position: relati
 .chapter-item > div:first-child { min-width: 0; }
 .chapter-item > div:first-child button { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chapter-item button { flex-shrink: 0; }
-button { color: var(--text); background: none; border: none; border-radius: 0;}
+button { color: var(--text); background: none; border: none; border-radius: 0; font-size: var(--text-sm); padding: 0; }
+.material-icons { font-size: var(--icon-size-base); line-height: 1; vertical-align: middle; }
 footer { background: var(--panel); border-top: 1px solid var(--border); display: flex; justify-content: space-between; min-height: 45px; flex-shrink: 0; padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
 .btn-group { display: flex; overflow-x: auto; }
 footer button { height: 45px; min-width: 45px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.sys-btn { width: 100%; border: 1px solid var(--border); height: 35px; margin-bottom: 5px; font-size: 11px; background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.sys-btn { width: 100%; border: 1px solid var(--border); height: var(--control-height); margin-bottom: var(--space-1); font-size: var(--text-sm); background: var(--input-bg); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 var(--space-2); }
 h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--border); padding-bottom: 5px; display: flex; justify-content: space-between; }
 #preview-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); color: var(--text); display: none; overflow-y: auto; padding: 60px 20%; z-index: 200; box-sizing: border-box; line-height: 1.7; }
 #toast { position: fixed; left: 50%; bottom: calc(58px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(12px); background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 10px 14px; font-size: 12px; max-width: min(90vw, 520px); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 300; }
@@ -63,9 +72,9 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
 }
 .scope-switch { font-size: 10px; padding: 10px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 15px; }
 .memo-add-row { display: flex; border-bottom: 1px solid var(--border); }
-.input-plain { flex: 1; border: none; padding: 10px; font-size: 11px; background: var(--input-bg); color: var(--text); }
+.input-plain { flex: 1; border: none; padding: var(--space-3); font-size: var(--text-sm); background: var(--input-bg); color: var(--text); }
 .icon-btn { border: none; background: var(--panel); border-left: 1px solid var(--border); width: 50px; cursor: pointer; color: var(--text); }
-.memo-textarea { flex: 1; width: 100%; border: none; outline: none; padding: 15px; background: transparent; color: var(--text); resize: none; font-size: 13px; line-height: 1.7; box-sizing: border-box; }
+.memo-textarea { flex: 1; width: 100%; border: none; outline: none; padding: 14px; background: transparent; color: var(--text); resize: none; font-size: var(--text-md); line-height: 1.7; box-sizing: border-box; }
 .memo-attach-wrap { border-top: 1px solid var(--border); padding: 8px; }
 .attach-btn { margin: 0 0 6px 0; }
 .floating-panel { position: fixed; top: 12px; right: 12px; width: min(84vw, 290px); border: 1px solid var(--border); background: var(--panel); padding: 8px; z-index: 280; display: none; border-radius: 0; box-shadow: none; }
@@ -91,6 +100,9 @@ h4 { margin: 15px 0 10px 0; font-size: 14px; border-bottom: 2px solid var(--bord
 .md-content th, .md-content td { border:1px solid var(--border); padding:5px 6px; text-align:left; vertical-align:top; }
 .md-content thead { background: var(--bg); }
 
+
+.chapter-item button, .memo-tab-btn, .icon-btn, .icon-only-btn { min-width: 32px; min-height: 32px; }
+.chapter-item .material-icons, .memo-tab-btn .material-icons { font-size: 16px; }
 
 
 .compact-search-panel .field { padding: 6px 8px; font-size: 12px; }

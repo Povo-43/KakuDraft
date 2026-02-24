@@ -109,7 +109,35 @@ async function toggleWakeLock(on) {
 }
 
 // === Main refreshUI ===
+async function hydrateSecretInputsFromState() {
+    const ghTokenInput = document.getElementById('gh-token');
+    if (ghTokenInput && !ghTokenInput.value && state.ghTokenEnc) {
+        ghTokenInput.value = await decryptPatToken(state.ghTokenEnc, state.deviceName);
+    }
+
+    const providers = ['openrouter', 'groq', 'google'];
+    for (const provider of providers) {
+        const input = document.getElementById(getAIKeyInputId(provider));
+        if (!input || input.value || !state.aiKeysEnc?.[provider]) continue;
+        input.value = await decryptPatToken(state.aiKeysEnc[provider], state.deviceName);
+    }
+}
+
 function refreshUI() {
+    const ghRepoInput = document.getElementById('gh-repo');
+    if (ghRepoInput && ghRepoInput.value !== (state.ghRepo || '')) ghRepoInput.value = state.ghRepo || '';
+    const deviceNameInput = document.getElementById('device-name');
+    if (deviceNameInput && deviceNameInput.value !== (state.deviceName || '')) deviceNameInput.value = state.deviceName || '';
+
+    const fontSel = document.getElementById('font-family');
+    if (fontSel && state.fontFamily) fontSel.value = state.fontFamily;
+    const aiProviderSel = document.getElementById('ai-provider');
+    if (aiProviderSel && state.aiProvider) aiProviderSel.value = state.aiProvider;
+    const aiModelSel = document.getElementById('ai-model');
+    if (aiModelSel && state.aiModel) aiModelSel.value = state.aiModel;
+    const aiFreeOnly = document.getElementById('ai-free-only');
+    if (aiFreeOnly) aiFreeOnly.checked = !!state.aiFreeOnly;
+
     renderFolderFilter();
     const visible = getVisibleChapterIndexes();
     document.getElementById('chapter-list').innerHTML = visible.map(i => {
@@ -289,11 +317,17 @@ async function initializeApp() {
         }
         
         // Load current chapter
+        await hydrateSecretInputsFromState();
         refreshUI();
         loadChapter(state.currentIdx);
         
         // Set up AI
         onAIProviderChange();
+
+        const ghRepoInput = document.getElementById('gh-repo');
+        if (ghRepoInput) ghRepoInput.addEventListener('input', () => { state.ghRepo = ghRepoInput.value.trim(); queuePersist(); });
+        const deviceNameInput = document.getElementById('device-name');
+        if (deviceNameInput) deviceNameInput.addEventListener('input', () => { state.deviceName = deviceNameInput.value.trim(); queuePersist(); });
         
         // Render
         renderMemos();

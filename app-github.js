@@ -5,6 +5,13 @@
 
 // === Cloud Pieces (build / apply / migrate) ===
 function buildCloudPieces() {
+    const chapterIndex = (state.chapters || []).map((ch, idx) => ({
+        id: ch.id || `chapter_${idx + 1}`,
+        title: ch.title || `chapter_${idx + 1}`,
+        tags: Array.isArray(ch.tags) ? ch.tags : [],
+        snapshots: Array.isArray(ch.snapshots) ? ch.snapshots : [],
+        currentMemoIdx: Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0
+    }));
     return {
         settings: {
             replaceRules: state.replaceRules, insertButtons: state.insertButtons, fontSize: state.fontSize, theme: state.theme,
@@ -13,7 +20,7 @@ function buildCloudPieces() {
             aiProvider: state.aiProvider, aiModel: state.aiModel, aiTab: state.aiTab, aiFreeOnly: state.aiFreeOnly, aiUsage: state.aiUsage
         },
         keys: { ghTokenEnc: state.ghTokenEnc, ghRepo: state.ghRepo, deviceName: state.deviceName, aiKeyEnc: state.aiKeyEnc, aiKeysEnc: state.aiKeysEnc },
-        stories: { chapters: state.chapters, currentIdx: state.currentIdx, writingSessions: state.writingSessions },
+        stories: { chapters: chapterIndex, currentIdx: state.currentIdx, writingSessions: state.writingSessions },
         memos: { globalMemos: state.globalMemos, currentGlobalMemoIdx: state.currentGlobalMemoIdx, memoScope: state.memoScope, folderMemos: state.folderMemos },
         aiChat: { list: aiChatState || [] },
         assetsIndex: state.assetsIndex || {items:[]}
@@ -50,7 +57,22 @@ function applyCloudPieces(remote, options = {}) {
         }
     }
     if (remote.stories) {
-        merged.chapters = remote.stories.chapters || merged.chapters;
+        if (Array.isArray(remote.stories.chapters)) {
+            const remoteChapterMap = new Map(remote.stories.chapters.map((ch, idx) => [ch.id || `chapter_${idx + 1}`, ch]));
+            merged.chapters = (merged.chapters || []).map((localChapter, idx) => {
+                const id = localChapter.id || `chapter_${idx + 1}`;
+                const remoteChapter = remoteChapterMap.get(id);
+                if (!remoteChapter) return localChapter;
+                return {
+                    ...localChapter,
+                    id,
+                    title: remoteChapter.title || localChapter.title,
+                    tags: Array.isArray(remoteChapter.tags) ? remoteChapter.tags : (localChapter.tags || []),
+                    snapshots: Array.isArray(remoteChapter.snapshots) ? remoteChapter.snapshots : (localChapter.snapshots || []),
+                    currentMemoIdx: Number.isInteger(remoteChapter.currentMemoIdx) ? remoteChapter.currentMemoIdx : (localChapter.currentMemoIdx || 0)
+                };
+            });
+        }
         merged.currentIdx = Number.isInteger(remote.stories.currentIdx) ? remote.stories.currentIdx : merged.currentIdx;
         merged.writingSessions = remote.stories.writingSessions || merged.writingSessions;
     }
@@ -75,12 +97,57 @@ function convertLegacyRemoteToPieces(legacyData, legacyAiChat) {
             aiProvider: normalized.aiProvider, aiModel: normalized.aiModel, aiTab: normalized.aiTab, aiFreeOnly: normalized.aiFreeOnly, aiUsage: normalized.aiUsage || {}
         },
         keys: { ghTokenEnc: normalized.ghTokenEnc || '', ghRepo: normalized.ghRepo || '', deviceName: normalized.deviceName || '', aiKeyEnc: normalized.aiKeyEnc || '', aiKeysEnc: normalized.aiKeysEnc || {} },
-        stories: { chapters: normalized.chapters, currentIdx: normalized.currentIdx, writingSessions: normalized.writingSessions || [] },
+        stories: { chapters: (normalized.chapters || []).map((ch, idx) => ({ id: ch.id || `chapter_${idx + 1}`, title: ch.title || `chapter_${idx + 1}`, tags: ch.tags || [], snapshots: ch.snapshots || [], currentMemoIdx: Number.isInteger(ch.currentMemoIdx) ? ch.currentMemoIdx : 0 })), currentIdx: normalized.currentIdx, writingSessions: normalized.writingSessions || [] },
         memos: { globalMemos: normalized.globalMemos, currentGlobalMemoIdx: normalized.currentGlobalMemoIdx, memoScope: normalized.memoScope, folderMemos: normalized.folderMemos || {} },
         aiChat: { list: Array.isArray(legacyAiChat) ? legacyAiChat.slice(-100) : [] },
         assetsIndex: { items: [] },
         metadata: { updatedAt: Date.now(), migratedFrom: 'legacy-cloud-format' }
     };
+}
+
+
+async function fetchTextFileFromGithub(headers, owner, repo, path) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const res = await requestJson(url, { headers });
+    if (res.res.status !== 200 || !res.body?.content) return null;
+    try {
+        const cleaned = (res.body.content || '').replace(/\n/g, '');
+        const binary = atob(cleaned);
+        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+    } catch {
+        return null;
+    }
+}
+
+async function applyRemoteTextBackups(headers, owner, repo, merged) {
+    const chapters = merged.chapters || [];
+    for (let i = 0; i < chapters.length; i++) {
+        const ch = chapters[i];
+        const chapterId = ch.id || `chapter_${i + 1}`;
+        const bodyText = await fetchTextFileFromGithub(headers, owner, repo, `話/${chapterId}/body.txt`);
+        if (bodyText !== null) ch.body = bodyText;
+
+        const memos = ch.memos || [];
+        for (let m = 0; m < memos.length; m++) {
+            const memoText = await fetchTextFileFromGithub(headers, owner, repo, `話/${chapterId}/memo_${m + 1}.txt`);
+            if (memoText !== null) memos[m].content = memoText;
+        }
+    }
+
+    const globalMemos = merged.globalMemos || [];
+    for (let i = 0; i < globalMemos.length; i++) {
+        const text = await fetchTextFileFromGithub(headers, owner, repo, `メモ/global_${i + 1}.txt`);
+        if (text !== null) globalMemos[i].content = text;
+    }
+
+    for (const [folderId, bundle] of Object.entries(merged.folderMemos || {})) {
+        const memos = bundle?.memos || [];
+        for (let i = 0; i < memos.length; i++) {
+            const text = await fetchTextFileFromGithub(headers, owner, repo, `メモ/folder_${folderId}_${i + 1}.txt`);
+            if (text !== null) memos[i].content = text;
+        }
+    }
 }
 
 async function putCloudPiece(headers, owner, repo, key, data, sha = '') {
@@ -265,6 +332,7 @@ async function githubSync(mode) {
                 preserveLocalUiPrefs: true,
                 preserveLocalDeviceName: true
             });
+            await applyRemoteTextBackups(headers, owner, repo, state);
             state.syncMeta = remote.metadata || state.syncMeta;
             await persistNow();
             showProgressToast('DOWN: 完了', 2, 2);
@@ -423,7 +491,7 @@ async function checkRemoteDiffOnStartup(token) {
     if (!changedPieces.length) return;
 
     showDiffDialog(
-        changedPieces.map(k => k === 'settings' ? '設定' : k === 'stories' ? '話本文' : k === 'memos' ? 'メモ' : 'AIチャット'),
+        changedPieces.map(k => k === 'settings' ? '設定' : k === 'stories' ? '話(索引)' : k === 'memos' ? 'メモ' : 'AIチャット'),
         changedPieces,
         async (selectedKeys) => {
             showProgressToast('リモートから差分を取得中...', 0, selectedKeys.length);

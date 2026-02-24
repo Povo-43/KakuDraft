@@ -18,7 +18,7 @@ const AI_CHAT_KEY = 'ai-chat';
 const CLOUD_PATHS = {
     settings: '設定/settings.json',
     keys: 'キー類/keys.json',
-    stories: '話/stories.json',
+    stories: '話/chapter_index.json',
     memos: 'メモ/memos.json',
     aiChat: '話/ai_chat.json',
     metadata: '設定/sync_metadata.json',

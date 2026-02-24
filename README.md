@@ -25,7 +25,7 @@ KakuDraft はブラウザで動作する日本語向け執筆アプリです。�
 - `設定/sync_metadata.json`
 - `設定/assets_index.json`
 - `キー類/keys.json`
-- `話/stories.json`
+- `話/chapter_index.json`
 - `メモ/memos.json`
 - `話/ai_chat.json`
 - `話/<内部ID>/body.txt`
@@ -34,7 +34,7 @@ KakuDraft はブラウザで動作する日本語向け執筆アプリです。�
 - `メモ/folder_<id>_<n>.txt`
 - `話/ai_chat.txt`
 
-> タイトル変更の影響を受けにくいように、本文系 TXT は内部IDベースで保存します。
+> 話の本文・メモは `stories.json` に集約せず、章ディレクトリ配下へ分割保存します。
 
 ## 添付ファイル同期
 

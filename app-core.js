@@ -55,6 +55,7 @@ let aiBusy = false;
 let aiThinkingDots = 1;
 let aiThinkingTimer = null;
 let wakeLockHandle = null;
+let deferredInstallPrompt = null;
 
 // Timers
 let syncTimer, toastTimer, persistTimer;
@@ -75,8 +76,64 @@ const GOOGLE_FONTS_MAP = {
 // === Service Worker registration ===
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' });
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).then((registration) => {
+            if (registration.waiting) showToast('アプリ更新があります。設定から「PWA更新適用」を実行してください。', 'success');
+            registration.addEventListener('updatefound', () => {
+                const worker = registration.installing;
+                if (!worker) return;
+                worker.addEventListener('statechange', () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                        showToast('新しいバージョンを取得しました。設定から「PWA更新適用」を実行できます。', 'success');
+                    }
+                });
+            });
+        }).catch(() => {
+            showToast('Service Worker 登録に失敗しました。', 'error');
+        });
     });
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    showToast('インストール可能です。お気に入りから「PWAをインストール」を選択してください。', 'success');
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    showToast('アプリをインストールしました。', 'success');
+});
+
+async function promptPWAInstall() {
+    if (!deferredInstallPrompt) {
+        showToast('この環境ではインストールプロンプトを表示できません。', 'error');
+        return;
+    }
+    deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    if (choice?.outcome === 'accepted') showToast('インストールを開始しました。', 'success');
+    else showToast('インストールをキャンセルしました。', 'error');
+}
+
+async function applyPWAUpdate() {
+    if (!('serviceWorker' in navigator)) {
+        showToast('このブラウザはPWA更新に未対応です。', 'error');
+        return;
+    }
+    const registration = await navigator.serviceWorker.getRegistration('./');
+    if (!registration) {
+        showToast('Service Worker が未登録です。', 'error');
+        return;
+    }
+    await registration.update();
+    if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        showToast('更新を適用して再読み込みします。', 'success');
+        setTimeout(() => location.reload(), 300);
+        return;
+    }
+    showToast('更新はありません。', 'success');
 }
 
 // === Crypto functions ===

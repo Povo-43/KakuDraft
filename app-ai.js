@@ -178,7 +178,7 @@ function ignoreAISuggestion(i) {
 
 function renderAISuggestions() {
     const reps = state.lastAISuggestions || [];
-    document.getElementById('ai-suggestions').innerHTML = reps.map((r, i) => `<div class="config-item" style="align-items:flex-start;"><div style="flex:1;"><div><strong>${escapeHtml(r.from || '')}</strong> → <strong>${escapeHtml(r.to || '')}</strong></div><div style="font-size:11px;opacity:.8;">${escapeHtml(r.reason || '')}</div></div><button onclick="applyAISuggestion(${i})" title="適用"><span class="material-icons" style="font-size:16px;">published_with_changes</span></button><button onclick="ignoreAISuggestion(${i})" title="この置き換えは無視"><span class="material-icons" style="font-size:16px;">block</span></button></div>`).join('') || '<div class="config-item">候補なし</div>';
+    document.getElementById('ai-suggestions').innerHTML = reps.map((r, i) => `<div class="config-item" style="align-items:flex-start;"><div style="flex:1;"><div><strong>${escapeHtml(r.from || '')}</strong> → <strong>${escapeHtml(r.to || '')}</strong></div><div style="font-size:11px;opacity:.8;">${escapeHtml(r.reason || '')}</div></div><button onclick="applyAISuggestion(${i})" title="適用"><span class="material-icons" style="font-size:19px;">published_with_changes</span></button><button onclick="ignoreAISuggestion(${i})" title="この置き換えは無視"><span class="material-icons" style="font-size:19px;">block</span></button></div>`).join('') || '<div class="config-item">候補なし</div>';
 }
 
 function renderMarkdown(text) {

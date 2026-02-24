@@ -1,16 +1,21 @@
 {
   "name": "KakuDraft",
   "short_name": "KakuDraft",
-  "start_url": "index.html",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait-primary",
   "background_color": "#fcfaf2",
   "theme_color": "#333333",
+  "lang": "ja",
   "icons": [
     {
       "src": "icon.png",
       "sizes": "1024x1024",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
-

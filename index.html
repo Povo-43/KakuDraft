@@ -24,7 +24,7 @@
         </div>
         <div id="memo-tabs" class="tab-bar"></div>
         <div class="memo-add-row"><input type="text" id="new-memo-name" placeholder="＋メモ名" class="input-plain"><button onclick="addMemoTab()" class="icon-btn"><span class="material-icons">add</span></button></div>
-        <textarea id="memo-area" class="memo-textarea"></textarea><div class="memo-attach-wrap"><button class="sys-btn attach-btn" onclick="document.getElementById('memo-attach-input').click()"><span class="material-icons" style="font-size:16px;">attach_file</span> 添付追加</button><input id="memo-attach-input" type="file" accept="image/*,audio/*,video/*,.txt,text/plain" style="display:none" onchange="attachMemoFile(this.files[0])"><div id="memo-attachments" class="config-list"></div><div id="memo-attachment-preview" class="config-list" style="display:none;"></div></div>
+        <textarea id="memo-area" class="memo-textarea"></textarea><div class="memo-attach-wrap"><button class="sys-btn attach-btn" onclick="document.getElementById('memo-attach-input').click()"><span class="material-icons" style="font-size:19px;">attach_file</span> 添付追加</button><input id="memo-attach-input" type="file" accept="image/*,audio/*,video/*,.txt,text/plain" style="display:none" onchange="attachMemoFile(this.files[0])"><div id="memo-attachments" class="config-list"></div><div id="memo-attachment-preview" class="config-list" style="display:none;"></div></div>
     </div>
 
     <div id="menu-panel" class="side-panel">
@@ -59,8 +59,8 @@
                 <h4>ダウンロード</h4>
                 <button class="sys-btn" onclick="toggleSelectAllDownloadTargets()">すべて選択 / 解除</button>
                 <div id="download-target-list" class="config-list"></div>
-                <button class="sys-btn" onclick="downloadSelectedZip()"><span class="material-icons" style="font-size:16px;">folder_zip</span> ZIPダウンロード</button>
-                <button class="sys-btn" onclick="downloadSelectedMergedTxt()"><span class="material-icons" style="font-size:16px;">description</span> 結合TXTダウンロード</button>
+                <button class="sys-btn" onclick="downloadSelectedZip()"><span class="material-icons" style="font-size:19px;">folder_zip</span> ZIPダウンロード</button>
+                <button class="sys-btn" onclick="downloadSelectedMergedTxt()"><span class="material-icons" style="font-size:19px;">description</span> 結合TXTダウンロード</button>
                 <label style="font-size:11px; font-weight:bold;">履歴</label>
                 <button class="sys-btn" onclick="takeBodySnapshot()">現在を保存</button>
                 <div id="snapshot-list" class="config-list"></div>
@@ -105,14 +105,14 @@
                 <div class="config-input-group"><input type="password" id="gh-token" placeholder="Fine-grained PAT"></div>
                 <div class="config-input-group"><input type="text" id="gh-repo" placeholder="リポジトリ名 or owner/repo"></div>
                 <div class="config-input-group"><input type="text" id="device-name" placeholder="端末名 (例: iPhone)"></div>
-                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:16px;">cloud_upload</span> UP</button><button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:16px;">cloud_download</span> DOWN</button></div>
+                <div style="display:flex; gap:5px; margin-bottom:10px;"><button class="sys-btn" onclick="githubSync('up')"><span class="material-icons" style="font-size:19px;">cloud_upload</span> UP</button><button class="sys-btn" onclick="githubSync('down')"><span class="material-icons" style="font-size:19px;">cloud_download</span> DOWN</button></div>
                 <h4>エクスポート</h4>
-                <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:16px;">download</span> JSON出力</button>
-                <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:16px;">upload</span> JSON復元</button>
-                <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:16px;">help</span> ヘルプ</button>
+                <button class="sys-btn" onclick="exportFullData()"><span class="material-icons" style="font-size:19px;">download</span> JSON出力</button>
+                <button class="sys-btn" onclick="document.getElementById('import-file').click()"><span class="material-icons" style="font-size:19px;">upload</span> JSON復元</button>
+                <button class="sys-btn" onclick="location.href='help.html'"><span class="material-icons" style="font-size:19px;">help</span> ヘルプ</button>
                 <input type="file" id="import-file" style="display:none" onchange="importFullData(this)">
                 <h4>GitHub スナップショット</h4>
-                <button class="sys-btn" onclick="fetchGithubSnapshots()"><span class="material-icons" style="font-size:16px;">cloud_sync</span> スナップショット一覧取得</button>
+                <button class="sys-btn" onclick="fetchGithubSnapshots()"><span class="material-icons" style="font-size:19px;">cloud_sync</span> スナップショット一覧取得</button>
                 <div id="gh-snapshot-list" class="config-list gh-snapshot-list"></div>
             </div>
 
@@ -128,7 +128,7 @@
 
     <div id="ai-panel" class="side-panel">
         <div class="panel-content ai-panel-content">
-            <h4>AIアシスタント <div style="display:flex; gap:6px;"><button id="ai-chat-clear-btn" class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="clearAIChatHistory()"><span class="material-icons" style="font-size:16px;">delete_sweep</span> 履歴クリア</button><button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:16px;">settings</span> 設定へ</button></div></h4>
+            <h4>AIアシスタント <div style="display:flex; gap:6px;"><button id="ai-chat-clear-btn" class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="clearAIChatHistory()"><span class="material-icons" style="font-size:19px;">delete_sweep</span> 履歴クリア</button><button class="sys-btn" style="width:auto;height:28px;margin:0;" onclick="openAISettings()"><span class="material-icons" style="font-size:19px;">settings</span> 設定へ</button></div></h4>
             <div id="ai-offline-note" class="config-item" style="display:none;">オフライン中はAI機能を利用できません。</div>
             <div id="ai-busy-note" class="config-item" style="display:none;">AI応答中です。</div>
             <div class="tab-bar ai-inner-tabs">

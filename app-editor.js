@@ -77,7 +77,7 @@ function moveMemo(i, delta) {
     renderMemos();
     save();
 }
-function renderMemos() { const memos = getCurrentMemoArray(); const container = document.getElementById('memo-tabs'); if (!container || !memos) return; container.innerHTML = memos.map((m, i) => `<button class="memo-tab ${i === getCurrentMemoIndex() ? 'active' : ''}" onclick="switchMemo(${i})">${escapeHtml(m.name)}</button><button class="memo-tab-btn" onclick="renameMemo(${i})" title="名前変更"><span class="material-icons" style="font-size:14px;">edit</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, -1)" title="左に移動"><span class="material-icons" style="font-size:14px;">chevron_left</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, 1)" title="右に移動"><span class="material-icons" style="font-size:14px;">chevron_right</span></button><button class="memo-tab-btn" onclick="deleteMemo(${i})" title="削除"><span class="material-icons" style="font-size:14px;">close</span></button>`).join(''); renderMemoAttachments(); }
+function renderMemos() { const memos = getCurrentMemoArray(); const container = document.getElementById('memo-tabs'); if (!container || !memos) return; container.innerHTML = memos.map((m, i) => `<button class="memo-tab ${i === getCurrentMemoIndex() ? 'active' : ''}" onclick="switchMemo(${i})">${escapeHtml(m.name)}</button><button class="memo-tab-btn" onclick="renameMemo(${i})" title="名前変更"><span class="material-icons" style="font-size:18px;">edit</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, -1)" title="左に移動"><span class="material-icons" style="font-size:18px;">chevron_left</span></button><button class="memo-tab-btn" onclick="moveMemo(${i}, 1)" title="右に移動"><span class="material-icons" style="font-size:18px;">chevron_right</span></button><button class="memo-tab-btn" onclick="deleteMemo(${i})" title="削除"><span class="material-icons" style="font-size:18px;">close</span></button>`).join(''); renderMemoAttachments(); }
 function deleteMemo(i) { const memos = getCurrentMemoArray(); if (!memos || memos.length <= 1) { showToast('メモは1つ以上必要です', 'error'); return; } if (!confirm(`メモ「${escapeHtml(memos[i].name)}」を削除しますか？`)) return; memos.splice(i, 1); const nextIdx = Math.min(getCurrentMemoIndex(), memos.length - 1);
     setCurrentMemoIndex(nextIdx); switchMemo(nextIdx); save(); }
 function switchMemo(i) {
@@ -121,9 +121,9 @@ async function renderMemoAttachments() {
     container.innerHTML = (memo.attachments || []).map((a, i) => `
         <div class="config-item" style="align-items:center;">
             <span style="flex:1; font-size:12px;">${escapeHtml(a.name)} (${a.size} bytes)</span>
-            <button onclick="previewMemoAttachment(${i})" title="プレビュー" style="padding:4px 8px;"><span class="material-icons" style="font-size:14px;">preview</span></button>
-            <button onclick="downloadMemoAttachment(${i})" title="ダウンロード" style="padding:4px 8px;"><span class="material-icons" style="font-size:14px;">download</span></button>
-            <button onclick="removeMemoAttachment(${i})" title="削除" style="padding:4px 8px;"><span class="material-icons" style="font-size:14px;">close</span></button>
+            <button onclick="previewMemoAttachment(${i})" title="プレビュー" style="padding:4px 8px;"><span class="material-icons" style="font-size:18px;">preview</span></button>
+            <button onclick="downloadMemoAttachment(${i})" title="ダウンロード" style="padding:4px 8px;"><span class="material-icons" style="font-size:18px;">download</span></button>
+            <button onclick="removeMemoAttachment(${i})" title="削除" style="padding:4px 8px;"><span class="material-icons" style="font-size:18px;">close</span></button>
         </div>
     `).join('') || '<div class="config-item">添付ファイルなし</div>';
 }

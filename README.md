@@ -8,6 +8,14 @@ KakuDraft はブラウザで動作する日本語向け執筆アプリです。�
 - 添付ファイル（画像・音声・動画・テキスト）
 - AIチャット / 校閲
 - GitHub同期（差分アップロード）
+- PWAインストール（ホーム画面追加）とオフライン起動
+
+## PWA / オフライン対応
+
+- Service Worker によりアプリシェル（HTML/CSS/JS/manifest/icon/help）を事前キャッシュし、オフラインでも起動できます。
+- 画面遷移（ナビゲーション）は network-first / fallback to cache で処理し、通信断時はキャッシュされた `index.html` を返します。
+- Google Fonts（`fonts.googleapis.com` / `fonts.gstatic.com`）はランタイムキャッシュされます。
+- お気に入り機能に `PWAをインストール` / `PWA更新適用` を追加でき、更新待機中SWの適用を手動実行できます。
 
 ## バックアップ構造
 

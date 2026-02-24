@@ -23,18 +23,37 @@ function switchMenuTab(tab) {
 function renderFavorites() {
     const box = document.getElementById('favorite-actions');
     if (!box) return;
+    const orderList = document.getElementById('favorite-order-list');
+    const selector = document.getElementById('favorite-selector');
     const actions = {
-        'sync-up': { label: 'UP', icon: 'cloud_upload', fn: () => githubSync('up') },
-        'sync-down': { label: 'DOWN', icon: 'cloud_download', fn: () => githubSync('down') },
-        'take-snapshot': { label: 'スナップショット', icon: 'save', fn: () => takeBodySnapshot() },
-        'toggle-theme': { label: 'テーマ切替', icon: 'dark_mode', fn: () => toggleTheme() },
-        'fetch-snapshots': { label: 'スナップショット一覧', icon: 'history', fn: () => fetchGithubSnapshots() },
+        'sync-up': { label: 'UP', icon: 'cloud_upload', run: "githubSync('up')" },
+        'sync-down': { label: 'DOWN', icon: 'cloud_download', run: "githubSync('down')" },
+        'take-snapshot': { label: 'スナップショット', icon: 'save', run: 'takeBodySnapshot()' },
+        'toggle-theme': { label: 'テーマ切替', icon: 'dark_mode', run: 'toggleTheme()' },
+        'fetch-snapshots': { label: 'スナップショット一覧', icon: 'history', run: 'fetchGithubSnapshots()' },
+        'install-pwa': { label: 'PWAをインストール', icon: 'download_for_offline', run: 'promptPWAInstall()' },
+        'apply-pwa-update': { label: 'PWA更新適用', icon: 'system_update_alt', run: 'applyPWAUpdate()' },
     };
     box.innerHTML = (state.favoriteActionKeys || []).map((key, i) => {
         const action = actions[key];
         if (!action) return '';
-        return `<div style="position:relative;"><button class="fav-btn" onclick="${action.fn.toString().match(/\w+/)[0]}()" title="${escapeHtml(action.label)}"><span class="material-icons">${action.icon}</span></button>${state.favoriteEditMode ? `<button style="position:absolute;top:0;right:-20px;padding:0;width:20px;height:20px;background:transparent;border:none;color:var(--text);" onclick="state.favoriteActionKeys.splice(${i},1);renderFavorites();save();">✕</button>` : ''}</div>`;
+        return `<div class="favorite-action-item"><button class="fav-btn" onclick="${action.run}" title="${escapeHtml(action.label)}"><span class="material-icons">${action.icon}</span><span class="fav-label">${escapeHtml(action.label)}</span></button>${state.favoriteEditMode ? `<button style="position:absolute;top:-6px;right:-6px;padding:0;width:20px;height:20px;background:var(--panel);border:1px solid var(--border);color:var(--text);" onclick="state.favoriteActionKeys.splice(${i},1);renderFavorites();save();">✕</button>` : ''}</div>`;
     }).join('');
+
+    if (orderList) {
+        orderList.innerHTML = (state.favoriteActionKeys || []).map((key, i) => {
+            const action = actions[key];
+            if (!action) return '';
+            return `<div class="config-item"><span style="flex:1;">${escapeHtml(action.label)}</span><button onclick="moveFavoriteAction(${i},-1)" title="上"><span class="material-icons" style="font-size:18px;">arrow_upward</span></button><button onclick="moveFavoriteAction(${i},1)" title="下"><span class="material-icons" style="font-size:18px;">arrow_downward</span></button></div>`;
+        }).join('') || '<div class="config-item">お気に入り未登録</div>';
+    }
+
+    if (selector) {
+        selector.innerHTML = Object.entries(actions).map(([key, action]) => {
+            const checked = (state.favoriteActionKeys || []).includes(key) ? 'checked' : '';
+            return `<label class="config-item" style="cursor:pointer;"><input type="checkbox" ${checked} onchange="toggleFavoriteAction('${key}', this.checked)"><span style="flex:1;">${escapeHtml(action.label)}</span><span class="material-icons" style="font-size:18px;">${action.icon}</span></label>`;
+        }).join('');
+    }
 }
 
 function toggleFavoriteAction(key, checked) {
@@ -99,7 +118,7 @@ function refreshUI() {
             const folder = state.folders.find(f => f.id === tagId);
             return `<span style="display:inline-block; background:var(--input-bg); padding:2px 6px; margin-right:4px; border-radius:3px; font-size:11px; margin-top:2px;">${folder ? folder.name : tagId}</span>`;
         }).join('');
-        return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><div style="flex:1;"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${escapeHtml(ch.title)}</button><div style="margin-top:2px;">${tagBadges}</div></div><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>arrow_downward</span></button><button onclick="openChapterTagEditor(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);" title="タグ編集"><span class='material-icons' style='font-size:16px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:16px;'>close</span></button></div>`;
+        return `<div class="chapter-item ${i === state.currentIdx ? 'active' : ''}"><div style="flex:1;"><button style="flex:1; text-align:left; background:transparent; border:none; color:var(--text); cursor:pointer;" onclick="switchChapter(${i})">${escapeHtml(ch.title)}</button><div style="margin-top:2px;">${tagBadges}</div></div><button onclick="renameChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:19px;'>edit</span></button><button onclick="moveChapter(${i},-1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:19px;'>arrow_upward</span></button><button onclick="moveChapter(${i},1)" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:19px;'>arrow_downward</span></button><button onclick="openChapterTagEditor(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);" title="タグ編集"><span class='material-icons' style='font-size:19px;'>folder</span></button><button onclick="deleteChapter(${i})" style="background:transparent;border:none;cursor:pointer;color:var(--text);"><span class='material-icons' style='font-size:19px;'>close</span></button></div>`;
     }).join('');
     renderDownloadTargets();
     renderList('replace-list', state.replaceRules || [], 'replace');
@@ -140,7 +159,7 @@ function toggleSelectAllDownloadTargets() {
 function renderList(id, data, type) {
     document.getElementById(id).innerHTML = data.map((item, i) => `
         <div class="config-item"><span style="flex:1">${item.from || item.label} → ${item.to || item.value}</span>
-        <span class="material-icons" style="font-size:16px; cursor:pointer;" onclick="removeItem('${type}', ${i})">delete_outline</span></div>
+        <span class="material-icons" style="font-size:19px; cursor:pointer;" onclick="removeItem('${type}', ${i})">delete_outline</span></div>
     `).join('');
 }
 

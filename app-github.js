@@ -297,10 +297,10 @@ async function fetchGithubSnapshots() {
                 </div>
                 <div class="snapshot-actions">
                     <button class="sys-btn" style="width:auto;height:28px;margin:0;padding:0 8px;" onclick="previewGithubSnapshot('${escapeHtml(f.path)}')">
-                        <span class="material-icons" style="font-size:14px;">preview</span>
+                        <span class="material-icons" style="font-size:18px;">preview</span>
                     </button>
                     <button class="sys-btn" style="width:auto;height:28px;margin:0;padding:0 8px;" onclick="restoreGithubSnapshot('${escapeHtml(f.path)}')">
-                        <span class="material-icons" style="font-size:14px;">restore</span>
+                        <span class="material-icons" style="font-size:18px;">restore</span>
                     </button>
                 </div>
             </div>`;
